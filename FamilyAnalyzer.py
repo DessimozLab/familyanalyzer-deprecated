@@ -10,7 +10,7 @@ try:
 except ImportError:
     import xml.etree.ElementTree as etree
 import collections
-import sys
+import itertools
 
 class ElementError(Exception):
     def __init__(self, msg):
@@ -24,10 +24,13 @@ class OrthoXMLParser(object):
     def __init__(self, filename):
         """creates a OrthoXMLParser object. the parameter filename needs to
         be a path pointing to the orthoxml file to be analyzed."""
-        doc = etree.parse(filename)
-        self.root = doc.getroot()
+        self.doc = etree.parse(filename)
+        self.root = self.doc.getroot()
 
         self.__buildMappings() # builds three dictionaries - see def below
+
+    def write(self, filename):
+        self.doc.write(filename)
 
     def mapGeneToXRef(self, id, typ='geneId'):
         """
@@ -223,6 +226,135 @@ class OrthoXMLParser(object):
         return famHist
 
 
+class TaxonomyInconsistencyError(Exception):
+    pass
+
+class Taxonomy(object):
+    def fromXML(self, filename):
+        pass
+
+    def buildFromOrthoXMLParser(self, parser):
+        self.extractAdjacencies(parser)
+        self.bloat_all()
+        self.extractHierarchy()
+        
+    def __parseParentChildRelsR(self, grp):
+        levels=None
+        if grp.tag=='{{{ns0}}}orthologGroup'.format(**self.parser.ns):
+            levels = [l.get('value') for l in grp.findall('./{{{ns0}}}property[@name="TaxRange"]'
+                .format(**self.parser.ns))]
+        children = filter( lambda x:x.tag in 
+            {"{{{ns0}}}orthologGroup".format(**self.parser.ns), 
+             "{{{ns0}}}paralogGroup".format(**self.parser.ns)},
+            list(grp))
+        subLevs = reduce( set.union, map(self.__parseParentChildRelsR, children), set())
+        if levels is not None:
+            for parent in levels:
+                for child in subLevs:
+                    self.adj.add((parent,child))
+            subLevs = set(levels)
+        return subLevs
+            
+    def extractAdjacencies(self, parser):
+        self.parser = parser
+        self.adj = set()
+        for grp in parser.getToplevelGroups():
+            self.__parseParentChildRelsR(grp)
+
+        del self.parser
+        self.nodes = set(itertools.chain(*self.adj))
+
+    def bloat_all(self):
+        """build transitive closure of all parent - child relations"""
+        while(self.bloat()):
+            pass
+
+    def bloat(self):
+        found = False
+        for pair in itertools.product(self.nodes, repeat = 2):
+            first, second = pair
+            for node in self.nodes:
+                if pair not in self.adj and (first, node) in self.adj and (node,second) in self.adj:
+                    found = True
+                    self.adj.add(pair)
+        return found
+
+    def extractHierarchy(self):
+        self.hierarchy = dict(zip( self.nodes, map( TaxNode, self.nodes)))
+        for pair in itertools.product(self.nodes, repeat = 2):
+            if pair in self.adj:
+                if self.good(pair):
+                    first, second = pair
+                    #print "%s,%s is good" % pair
+                    self.hierarchy[first].addChild(self.hierarchy[second])
+                    self.hierarchy[second].addParent(self.hierarchy[first])
+        noParentNodes = [z for z in self.nodes if self.hierarchy[z].up is None]
+        if len(noParentNodes)!=1:
+            raise TaxonomyInconsistencyError(
+                "Warning: several/none TaxonomyNodes are roots: {}"
+                .format(noParentNodes))
+        self.root = noParentNodes[0]
+
+
+    def good(self, pair):
+        first, second = pair
+        for node in self.nodes:
+            if (first, node) in self.adj and (node, second) in self.adj:
+                return False
+        return True
+
+
+    def iterParents(self, node, stopBefor=None):
+        tn = self.hierarchy[node]
+        while tn.up is not None and tn.up.name != stopBefor:
+            tn = tn.up
+            yield tn.name
+
+    def mostSpecific(self, levels):
+        levels = set(levels)
+        # count who often each element is a child of any other one.
+        # the one with len(levels)-1 is the most specific level
+        cnts = map( lambda x:len( set(self.iterParents(x)).intersection(levels)), levels)
+        levels = list(levels)
+        try:
+            return levels[cnts.index(len(levels)-1)] 
+        except:
+            raise Exception("Non of the element is subelement of all others")
+
+    def printSubTreeR(self, fd, lev=None, indent=0):
+        if lev is None:
+            lev = self.root
+        fd.write("{}{}\n".format(" "*2*indent, lev))
+        for child in self.hierarchy[lev].down:
+            self.printSubTreeR(fd, child.name, indent+1)
+
+    def __str__(self):
+        import cStringIO as sIO
+        fd = sIO.StringIO()
+        self.printSubTreeR(fd)
+        res = fd.getvalue()
+        fd.close()
+        return res
+
+
+class TaxNode(object):
+    def __init__(self, name):
+        self.name = name
+        self.up = None
+        self.down = list()
+
+    def addChild(self, c):
+        if not c in self.down:
+            self.down.append(c)
+
+    def addParent(self, p):
+        if self.up is not None:
+            raise TaxonomyInconsistencyError(
+                "Level {} has several parents, at least two: {}, {}"
+                .format(self.name, self.up.name, p.name))
+        self.up = p
+
+
 class FamHistory(object):
     XRefTag = None;
     def __init__(self, parser, species, level):
@@ -301,13 +433,48 @@ class GroupAnnotator(object):
     def __annotateGroupR(self, node, og, idx=0):
         if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
             node.set('og',og)
-            for child in node.getchildren():
+            for child in list(node):
                 self.__annotateGroupR(child, og, idx)
         elif node.tag=="{{{ns0}}}paralogGroup".format(**self.ns):
             idx += 1
             nextOG = "{}.{}".format(og, self.__getNextSubId(idx))
-            for i, child in enumerate(node.getchildren()):
+            for i, child in enumerate(list(node)):
                 self.__annotateGroupR(child, self.__encodeParalogClusterId(nextOG,i), idx);
+
+    def __addTaxRangeR(self, node, last=None):
+        if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
+            levels = {z.get('value') for z in node.findall(
+                './{{{ns0}}}property[@name="TaxRange"]'
+                .format(**self.ns))}
+            mostSpecificLevel = self.tax.mostSpecific( levels )
+            levelsToParent = set( self.tax.iterParents(mostSpecificLevel, last) )
+            levelsToParent.add(mostSpecificLevel)
+            if not levels.issubset(levelsToParent):
+                raise Exception("taxonomy not in correspondance with found hierarchy: {} vs {}"
+                    .format(levels, levelsToParent))
+            addLevels = levelsToParent - levels
+            for lev in addLevels:
+                node.append( etree.Element('{{{ns0}}}property'.format(**self.ns), 
+                    name="TaxRange", value=lev) )
+            for child in list(node):
+                self.__addTaxRangeR(child, mostSpecificLevel)
+
+        elif node.tag=="{{{ns0}}}paralogGroup".format(**self.ns):
+            for child in list(node):
+                self.__addTaxRangeR(child, last)
+        
+
+    def annotateMissingTaxRanges(self, tax):
+        """This function adds left-out taxrange property elements to 
+        the orthologGroup elements in the xml. It will add all the levels
+        defined in the 'tax'-Taxonomy between the parents most specific 
+        level and the current nodes level. If no parent exists, all 
+        tax-levels above the current one are used."""
+        self.tax = tax
+        for fam in self.parser.getToplevelGroups():
+            self.__addTaxRangeR(fam)
+        del self.tax
+        
     
     def annotateDoc(self):
         for i, fam in enumerate(self.parser.getToplevelGroups()):
@@ -316,11 +483,15 @@ class GroupAnnotator(object):
 
 if __name__=="__main__":
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description='Analyze Hierarchical OrthoXML families.')
-    parser.add_argument('-t','--xreftag', default=None, help='xref tag of genes to report')
+    parser.add_argument('--xreftag', default=None, help='xref tag of genes to report')
     parser.add_argument('--show_levels', action='store_true', help='show available levels and species and quit')
     parser.add_argument('-r', '--use-recursion', action='store_true', help='Use recursion to sample families that are a subset of the query')
+    parser.add_argument('--taxonomy',default='implicit', help='Taxonomy used to reconstruct intermediate levels. Has to be either "implicit" (default) or a path to a file. If set to "implicit", the taxonomy is extracted from the input OrthoXML file')
+    parser.add_argument('--show_taxonomy',action='store_true', help='show taxonomy used to infer missing levels')
+    parser.add_argument('--store_augmented_xml', default=None, help='if set to a filename, the input orthoxml file with augmented annotations is written')
     parser.add_argument('path', help='path to orthoxml file')
     parser.add_argument('level', help='taxonomic level at which analysis should be done')
     parser.add_argument('species', nargs="+", help='(list of) species to be analyzed')
@@ -335,7 +506,18 @@ if __name__=="__main__":
     print("Species found:")
     print("; ".join(op.getSpeciesSet()))
     print("--> analyzing " + "; ".join(args.species))
+    
+    tax = Taxonomy()
+    if args.taxonomy=="implicit":
+        tax.buildFromOrthoXMLParser(op)
+    else:
+        tax.buildFromXML(args.taxonomy)
 
+    if args.show_taxonomy:
+        print("Use following taxonomy")
+        print(tax)
+
+    GroupAnnotator(op).annotateMissingTaxRanges(tax)
     #print op.getSubFamilies("mouse2_mouse")
     #for fam in op.getUbiquitusFamilies(minCoverage=.75):
     #    print fam.get('id');
@@ -346,3 +528,6 @@ if __name__=="__main__":
         hist=op.getFamHistory(args.species, args.level)
     hist.setXRefTag(args.xreftag)
     hist.write()
+
+    if args.store_augmented_xml is not None:
+        op.write( args.store_augmented_xml )
