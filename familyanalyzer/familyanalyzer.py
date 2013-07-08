@@ -27,22 +27,22 @@ class OrthoXMLParser(object):
         self.doc = etree.parse(filename)
         self.root = self.doc.getroot()
 
-        self.__buildMappings() # builds three dictionaries - see def below
+        self._buildMappings() # builds three dictionaries - see def below
 
     def write(self, filename):
         self.doc.write(filename)
 
     def mapGeneToXRef(self, id, typ='geneId'):
         """
-        Looks up id (integer id number as a string) and type in self.__xrefs
-        dictionary (aka self._OrthoXMLParser__xrefs)
+        Looks up id (integer id number as a string) and type in self._xrefs
+        dictionary (aka self._xrefs)
         Returns lookup value, which is a gene name
         """
         if typ is None:
             res = id
         else:
             tup = (id,typ)
-            res = self.__xrefs.get(tup,None)
+            res = self._xrefs.get(tup,None)
             if res is None:
                 # fallback, if not in dict
                 gene = self.root.find('.*//{{{}}}gene[@id="{}"]'.format(self.ns['ns0'], id))
@@ -54,10 +54,10 @@ class OrthoXMLParser(object):
         return res
         
     def getSpeciesSet(self):
-        return self.__species # all species in the xml tree
+        return self._species # all species in the xml tree
 
     def getGeneIds(self):
-        return self.__gene2species.keys()
+        return self._gene2species.keys()
     
     def getToplevelGroups(self):
         """A function yielding the toplevel orthologGroups from the file.
@@ -96,8 +96,8 @@ class OrthoXMLParser(object):
             root = self.root
 
         # Stopping criterion for matching top-level node
-        if (self.__is_ortholog_group(root)
-            and self.__is_at_desired_level(root, level) ):
+        if (self._is_ortholog_group(root)
+            and self._is_at_desired_level(root, level) ):
             subfamilies.append(root)
             return
 
@@ -111,10 +111,10 @@ class OrthoXMLParser(object):
 
         return subfamilies
 
-    def __is_ortholog_group(self, element):
+    def _is_ortholog_group(self, element):
         return element.tag == '{http://orthoXML.org/2011/}orthologGroup'
 
-    def __is_at_desired_level(self, element, querylevel):
+    def _is_at_desired_level(self, element, querylevel):
         """
         Tests if the element is at a taxonomic level equal to or below
         `querylevel`.
@@ -127,7 +127,7 @@ class OrthoXMLParser(object):
         splitting the level string on '/' and making a set. NB issubset returns
         True when sets are equal.
         """
-        if not self.__is_ortholog_group(element): 
+        if not self._is_ortholog_group(element): 
             raise ElementError('Not an orthologGroup node')
             # return False
         if querylevel == 'LUCA':
@@ -143,20 +143,20 @@ class OrthoXMLParser(object):
 
     def mapGeneToSpecies(self, id, typ='name'):
         """
-        Does a lookup in the self.__gene2species dict:
+        Does a lookup in the self._gene2species dict:
         key = idnum, return = species name
         """
-        if self.__gene2species is None:
-            self.__buildMappings()
-        return self.__gene2species[id].get(typ)
+        if self._gene2species is None:
+            self._buildMappings()
+        return self._gene2species[id].get(typ)
 
-    def __buildMappings(self):
+    def _buildMappings(self):
         """
         Builds two dictionaries:
-          self.__gene2species - keys are ID numbers, values are species
-          self.__xrefs - keys are tuples (idnum, idtype ['geneId','protId']), values are gene names
+          self._gene2species - keys are ID numbers, values are species
+          self._xrefs - keys are tuples (idnum, idtype ['geneId','protId']), values are gene names
         Also builds the set:
-          self.__species - All species names in the xml tree
+          self._species - All species names in the xml tree
         """
         mapping=dict()
         xref = dict()
@@ -168,10 +168,10 @@ class OrthoXMLParser(object):
                 for tag in gene.keys():
                     if tag!="id":
                         xref[(id,tag)]=gene.get(tag) 
-        self.__gene2species=mapping
-        self.__xrefs = xref
-        self.__species = frozenset({z.get('name') for z in mapping.values()})
-        self.__levels = set(n.get('value') for n in self.root.findall(
+        self._gene2species=mapping
+        self._xrefs = xref
+        self._species = frozenset({z.get('name') for z in mapping.values()})
+        self._levels = set(n.get('value') for n in self.root.findall(
             ".//{{{0}}}property".format(self.ns['ns0'])))
 
     def getUbiquitusFamilies(self, minCoverage=.5):
@@ -181,7 +181,7 @@ class OrthoXMLParser(object):
             families)
 
     def getLevels(self):
-        return self.__levels
+        return self._levels
 
     def getGenesPerSpeciesInFam(self, fam):
         """
@@ -238,7 +238,7 @@ class Taxonomy(object):
         self.bloat_all()
         self.extractHierarchy()
         
-    def __parseParentChildRelsR(self, grp):
+    def _parseParentChildRelsR(self, grp):
         levels=None
         if grp.tag=='{{{ns0}}}orthologGroup'.format(**self.parser.ns):
             levels = [l.get('value') for l in grp.findall('./{{{ns0}}}property[@name="TaxRange"]'
@@ -247,7 +247,7 @@ class Taxonomy(object):
             {"{{{ns0}}}orthologGroup".format(**self.parser.ns), 
              "{{{ns0}}}paralogGroup".format(**self.parser.ns)},
             list(grp))
-        subLevs = reduce( set.union, map(self.__parseParentChildRelsR, children), set())
+        subLevs = reduce( set.union, map(self._parseParentChildRelsR, children), set())
         if levels is not None:
             for parent in levels:
                 for child in subLevs:
@@ -259,7 +259,7 @@ class Taxonomy(object):
         self.parser = parser
         self.adj = set()
         for grp in parser.getToplevelGroups():
-            self.__parseParentChildRelsR(grp)
+            self._parseParentChildRelsR(grp)
 
         del self.parser
         self.nodes = set(itertools.chain(*self.adj))
@@ -361,11 +361,11 @@ class FamHistory(object):
         self.parser = parser
         self.species = set(species)
         self.level = level
-        self.__gene2copies = dict()
+        self._gene2copies = dict()
         for g in self.species:
-            self.__gene2copies[g] = collections.defaultdict(list)
-        self.__gene2fam = dict()
-        self.__famWhereLost = collections.defaultdict(list)
+            self._gene2copies[g] = collections.defaultdict(list)
+        self._gene2fam = dict()
+        self._famWhereLost = collections.defaultdict(list)
     
     def setXRefTag(self, tag):
         self.XRefTag = tag
@@ -376,14 +376,14 @@ class FamHistory(object):
         for species in self.species:
             gids = genesPerSpec.get(species)
             if gids is None:
-                self.__famWhereLost[species].append(famId)
+                self._famWhereLost[species].append(famId)
             else:
                 for gid in gids:
-                    self.__gene2copies[species][gid] = gids
-                    self.__gene2fam[gid] = famId
+                    self._gene2copies[species][gid] = gids
+                    self._gene2fam[gid] = famId
  
-    def __getFamOfGeneIds(self, gids):
-        coveredFams = set(map(lambda x: self.__gene2fam.get(x,None), gids))
+    def _getFamOfGeneIds(self, gids):
+        coveredFams = set(map(lambda x: self._gene2fam.get(x,None), gids))
         return coveredFams
     
     def write(self):
@@ -391,23 +391,23 @@ class FamHistory(object):
         for species in self.species:
             gids = filter(lambda gid:self.parser.mapGeneToSpecies(gid)==species,
                 self.parser.getGeneIds())
-            gids.sort(cmp=lambda x,y:len(self.__gene2copies[species][x]) - len(self.__gene2copies[species][y]) )
-            coveredFams = set(map(lambda x: self.__gene2fam.get(x,None), gids))
+            gids.sort(cmp=lambda x,y:len(self._gene2copies[species][x]) - len(self._gene2copies[species][y]) )
+            coveredFams = set(map(lambda x: self._gene2fam.get(x,None), gids))
             print("{} - {} of {} sub-families covered".
                 format(species, len(coveredFams), 
-                    len(coveredFams)+ len(self.__famWhereLost[species])))
+                    len(coveredFams)+ len(self._famWhereLost[species])))
             for gid in gids:
-                if len(self.__gene2copies[species][gid])<=0:
+                if len(self._gene2copies[species][gid])<=0:
                     print(" {}: n/a (singleton not in any family)".format(
                         self.parser.mapGeneToXRef(gid, self.XRefTag)))
                 else:
                     args = dict(gXref=self.parser.mapGeneToXRef(gid,self.XRefTag),
-                        famId=self.__gene2fam[gid],
-                        cnt=len(self.__gene2copies[species][gid]),
+                        famId=self._gene2fam[gid],
+                        cnt=len(self._gene2copies[species][gid]),
                         sib=";".join([self.parser.mapGeneToXRef(z,self.XRefTag) 
-                            for z in self.__gene2copies[species][gid]]))
+                            for z in self._gene2copies[species][gid]]))
                     print(" {gXref}: {famId} ({cnt}): {sib}".format(**args))
-            for fam in self.__famWhereLost[species]:
+            for fam in self._famWhereLost[species]:
                 print(" n/a: {} (0) no member in subfamily".format(fam))
                 
         
@@ -416,13 +416,13 @@ class GroupAnnotator(object):
         self.parser = parser
         self.ns=parser.ns
 
-    def __getNextSubId(self, idx):
+    def _getNextSubId(self, idx):
         while len(self.dupCnt)<idx:
             self.dupCnt.append(0)
         self.dupCnt[idx-1] += 1
         return self.dupCnt[idx-1]
 
-    def __encodeParalogClusterId(self, prefix, nr):
+    def _encodeParalogClusterId(self, prefix, nr):
         letters = []
         while nr/26 > 0:
             letters.append(chr(97+nr%26))
@@ -430,18 +430,18 @@ class GroupAnnotator(object):
         letters.append(chr(97+nr%26))
         return prefix+''.join(letters[::-1]) # letters were in reverse order
 
-    def __annotateGroupR(self, node, og, idx=0):
+    def _annotateGroupR(self, node, og, idx=0):
         if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
             node.set('og',og)
             for child in list(node):
-                self.__annotateGroupR(child, og, idx)
+                self._annotateGroupR(child, og, idx)
         elif node.tag=="{{{ns0}}}paralogGroup".format(**self.ns):
             idx += 1
-            nextOG = "{}.{}".format(og, self.__getNextSubId(idx))
+            nextOG = "{}.{}".format(og, self._getNextSubId(idx))
             for i, child in enumerate(list(node)):
-                self.__annotateGroupR(child, self.__encodeParalogClusterId(nextOG,i), idx);
+                self._annotateGroupR(child, self._encodeParalogClusterId(nextOG,i), idx);
 
-    def __addTaxRangeR(self, node, last=None):
+    def _addTaxRangeR(self, node, last=None):
         if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
             levels = {z.get('value') for z in node.findall(
                 './{{{ns0}}}property[@name="TaxRange"]'
@@ -457,11 +457,11 @@ class GroupAnnotator(object):
                 node.append( etree.Element('{{{ns0}}}property'.format(**self.ns), 
                     name="TaxRange", value=lev) )
             for child in list(node):
-                self.__addTaxRangeR(child, mostSpecificLevel)
+                self._addTaxRangeR(child, mostSpecificLevel)
 
         elif node.tag=="{{{ns0}}}paralogGroup".format(**self.ns):
             for child in list(node):
-                self.__addTaxRangeR(child, last)
+                self._addTaxRangeR(child, last)
         
 
     def annotateMissingTaxRanges(self, tax):
@@ -472,14 +472,14 @@ class GroupAnnotator(object):
         tax-levels above the current one are used."""
         self.tax = tax
         for fam in self.parser.getToplevelGroups():
-            self.__addTaxRangeR(fam)
+            self._addTaxRangeR(fam)
         del self.tax
         
     
     def annotateDoc(self):
         for i, fam in enumerate(self.parser.getToplevelGroups()):
             self.dupCnt=list()
-            self.__annotateGroupR(fam, fam.get('id',str(i)))
+            self._annotateGroupR(fam, fam.get('id',str(i)))
 
 if __name__=="__main__":
     import argparse
