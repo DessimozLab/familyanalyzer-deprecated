@@ -305,6 +305,8 @@ class Taxonomy(object):
 
 
     def iterParents(self, node, stopBefor=None):
+        if node==stopBefor:
+            return
         tn = self.hierarchy[node]
         while tn.up is not None and tn.up.name != stopBefor:
             tn = tn.up
@@ -348,7 +350,7 @@ class TaxNode(object):
             self.down.append(c)
 
     def addParent(self, p):
-        if self.up is not None:
+        if self.up is not None and self.up != p:
             raise TaxonomyInconsistencyError(
                 "Level {} has several parents, at least two: {}, {}"
                 .format(self.name, self.up.name, p.name))
