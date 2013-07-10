@@ -443,17 +443,20 @@ class GroupAnnotator(object):
             for i, child in enumerate(list(node)):
                 self._annotateGroupR(child, self._encodeParalogClusterId(nextOG,i), idx);
 
-    def _addTaxRangeR(self, node, last=None):
+    def _addTaxRangeR(self, node, last=None, noUpwardLevels=False):
         if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
             levels = {z.get('value') for z in node.findall(
                 './{{{ns0}}}property[@name="TaxRange"]'
                 .format(**self.ns))}
             mostSpecificLevel = self.tax.mostSpecific( levels )
-            levelsToParent = set( self.tax.iterParents(mostSpecificLevel, last) )
-            levelsToParent.add(mostSpecificLevel)
-            if not levels.issubset(levelsToParent):
-                raise Exception("taxonomy not in correspondance with found hierarchy: {} vs {}"
-                    .format(levels, levelsToParent))
+            if noUpwardLevels:
+                levelsToParent = set()
+            else:
+                levelsToParent = set( self.tax.iterParents(mostSpecificLevel, last) )
+                levelsToParent.add(mostSpecificLevel)
+                if not levels.issubset(levelsToParent):
+                    raise Exception("taxonomy not in correspondance with found hierarchy: {} vs {}"
+                        .format(levels, levelsToParent))
             addLevels = levelsToParent - levels
             for lev in addLevels:
                 node.append( etree.Element('{{{ns0}}}property'.format(**self.ns), 
@@ -466,7 +469,7 @@ class GroupAnnotator(object):
                 self._addTaxRangeR(child, last)
         
 
-    def annotateMissingTaxRanges(self, tax):
+    def annotateMissingTaxRanges(self, tax, propagate_top=False):
         """This function adds left-out taxrange property elements to 
         the orthologGroup elements in the xml. It will add all the levels
         defined in the 'tax'-Taxonomy between the parents most specific 
@@ -474,7 +477,7 @@ class GroupAnnotator(object):
         tax-levels above the current one are used."""
         self.tax = tax
         for fam in self.parser.getToplevelGroups():
-            self._addTaxRangeR(fam)
+            self._addTaxRangeR(fam, noUpwardLevels=not propagate_top)
         del self.tax
         
     
@@ -492,6 +495,7 @@ if __name__=="__main__":
     parser.add_argument('--show_levels', action='store_true', help='show available levels and species and quit')
     parser.add_argument('-r', '--use-recursion', action='store_true', help='Use recursion to sample families that are a subset of the query')
     parser.add_argument('--taxonomy',default='implicit', help='Taxonomy used to reconstruct intermediate levels. Has to be either "implicit" (default) or a path to a file. If set to "implicit", the taxonomy is extracted from the input OrthoXML file')
+    parser.add_argument('--propagate_top', action='store_true', help='propagate taxonomy levels up to the toplevel. If not set, only intermediate levels are propagated.')
     parser.add_argument('--show_taxonomy',action='store_true', help='show taxonomy used to infer missing levels')
     parser.add_argument('--store_augmented_xml', default=None, help='if set to a filename, the input orthoxml file with augmented annotations is written')
     parser.add_argument('path', help='path to orthoxml file')
@@ -519,7 +523,7 @@ if __name__=="__main__":
         print("Use following taxonomy")
         print(tax)
 
-    GroupAnnotator(op).annotateMissingTaxRanges(tax)
+    GroupAnnotator(op).annotateMissingTaxRanges(tax, propagate_top=args.propagate_top)
     #print op.getSubFamilies("mouse2_mouse")
     #for fam in op.getUbiquitusFamilies(minCoverage=.75):
     #    print fam.get('id');
