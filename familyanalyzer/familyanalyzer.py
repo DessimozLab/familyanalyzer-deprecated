@@ -200,8 +200,6 @@ class OrthoXMLParser(object):
 
 
     def getFamHistory(self, species=None, level=None):
-        gene2copies = collections.defaultdict(list)
-        famWhereLost = list()
         # assure that orthologGroup xml elements annotated with an 'og' attr
         if self.root.find(".//*[@og]") is None:
             GroupAnnotator(self).annotateDoc()
@@ -213,8 +211,6 @@ class OrthoXMLParser(object):
         return famHist
 
     def getFamHistoryByRecursion(self, species=None, level=None):
-        gene2copies = collections.defaultdict(list)
-        famWhereLost = list()
         # assure that orthologGroup xml elements annotated with an 'og' attr
         if self.root.find(".//*[@og]") is None:
             GroupAnnotator(self).annotateDoc()
