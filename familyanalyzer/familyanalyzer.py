@@ -243,7 +243,10 @@ class Taxonomy(object):
             {"{{{ns0}}}orthologGroup".format(**self.parser.ns), 
              "{{{ns0}}}paralogGroup".format(**self.parser.ns)},
             list(grp))
-        subLevs = reduce( set.union, map(self._parseParentChildRelsR, children), set())
+        # recursivly process childreen nodes
+        subLevs = set()
+        for child in children:
+            subLevs.union(self._parseParentChildRelsR(child))
         if levels is not None:
             for parent in levels:
                 for child in subLevs:
