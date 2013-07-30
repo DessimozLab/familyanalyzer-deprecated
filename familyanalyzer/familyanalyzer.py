@@ -96,7 +96,7 @@ class OrthoXMLParser(object):
             root = self.root
 
         # Stopping criterion for matching top-level node
-        if (self._is_ortholog_group(root)
+        if (self.is_ortholog_group(root)
             and self._is_at_desired_level(root, level) ):
             subfamilies.append(root)
             return
@@ -111,8 +111,18 @@ class OrthoXMLParser(object):
 
         return subfamilies
 
-    def _is_ortholog_group(self, element):
-        return element.tag == '{http://orthoXML.org/2011/}orthologGroup'
+    def is_ortholog_group(self, element):
+        """Returns true if the passed element is an orthologGroup xml node"""
+        return element.tag == '{{{ns0}}}orthologGroup'.format(**self.ns)
+
+    def is_paralog_group(self, element):
+        """Returns true if the passed element is an paralogGroup xml node"""
+        return element.tag == '{{{ns0}}}paralogGroup'.format(**self.ns)
+
+    def is_evolutionary_node(self, element):
+        """Returns true if the passed element is an evolutionary event xml node,
+        i.e. if it is either an orthologGroup or a paralogGroup element."""
+        return self.is_ortholog_group(element) or self.is_paralog_group(element)
 
     def _is_at_desired_level(self, element, querylevel):
         """
@@ -127,7 +137,7 @@ class OrthoXMLParser(object):
         splitting the level string on '/' and making a set. NB issubset returns
         True when sets are equal.
         """
-        if not self._is_ortholog_group(element): 
+        if not self.is_ortholog_group(element): 
             raise ElementError('Not an orthologGroup node')
             # return False
         if querylevel == 'LUCA':
@@ -236,13 +246,12 @@ class Taxonomy(object):
         
     def _parseParentChildRelsR(self, grp):
         levels=None
-        if grp.tag=='{{{ns0}}}orthologGroup'.format(**self.parser.ns):
+        if self.parser.is_ortholog_group(grp): 
             levels = [l.get('value') for l in grp.findall('./{{{ns0}}}property[@name="TaxRange"]'
                 .format(**self.parser.ns))]
-        children = filter( lambda x:x.tag in 
-            {"{{{ns0}}}orthologGroup".format(**self.parser.ns), 
-             "{{{ns0}}}paralogGroup".format(**self.parser.ns)},
-            list(grp))
+        directChildNodes = list(grp)
+        children = [child for child in directChildNodes if self.parser.is_evolutionary_node(child)]
+
         # recursivly process childreen nodes
         subLevs = set()
         for child in children:
