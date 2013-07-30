@@ -255,7 +255,8 @@ class Taxonomy(object):
         # recursivly process childreen nodes
         subLevs = set()
         for child in children:
-            subLevs.union(self._parseParentChildRelsR(child))
+            subLevs.update(self._parseParentChildRelsR(child))
+
         if levels is not None:
             for parent in levels:
                 for child in subLevs:
