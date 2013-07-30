@@ -186,9 +186,7 @@ class OrthoXMLParser(object):
 
     def getUbiquitusFamilies(self, minCoverage=.5):
         families = self.getToplevelGroups();
-        return filter(
-            lambda x:len(self.getGenesPerSpeciesInFam(x))>=minCoverage*len(self.getSpeciesSet()), 
-            families)
+        return [x for x in families if len(self.getGenesPerSpeciesInFam(x))>=minCoverage*len(self.getSpeciesSet())]
 
     def getLevels(self):
         return self._levels
@@ -325,7 +323,7 @@ class Taxonomy(object):
         levels = set(levels)
         # count who often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
-        cnts = map( lambda x:len( set(self.iterParents(x)).intersection(levels)), levels)
+        cnts = [len(set(self.iterParents(x)).intersection(levels)) for x in levels]
         levels = list(levels)
         try:
             return levels[cnts.index(len(levels)-1)] 
@@ -340,7 +338,7 @@ class Taxonomy(object):
             self.printSubTreeR(fd, child.name, indent+1)
 
     def __str__(self):
-        import cStringIO as sIO
+        import io as sIO
         fd = sIO.StringIO()
         self.printSubTreeR(fd)
         res = fd.getvalue()
@@ -394,16 +392,16 @@ class FamHistory(object):
                     self._gene2fam[gid] = famId
  
     def _getFamOfGeneIds(self, gids):
-        coveredFams = set(map(lambda x: self._gene2fam.get(x,None), gids))
+        coveredFams = set([self._gene2fam.get(x,None) for x in gids])
         return coveredFams
     
     def write(self):
         print('\nFamily Analysis:')
         for species in self.species:
-            gids = filter(lambda gid:self.parser.mapGeneToSpecies(gid)==species,
-                self.parser.getGeneIds())
-            gids.sort(cmp=lambda x,y:len(self._gene2copies[species][x]) - len(self._gene2copies[species][y]) )
-            coveredFams = set(map(lambda x: self._gene2fam.get(x,None), gids))
+            # get geneIds of genes belonging to this species
+            gids = [gid for gid in self.parser.getGeneIds() if self.parser.mapGeneToSpecies(gid)==species]
+            gids.sort(key=lambda x:len(self._gene2copies[species][x]))
+            coveredFams = set([self._gene2fam.get(x,None) for x in gids])
             print("{} - {} of {} sub-families covered".
                 format(species, len(coveredFams), 
                     len(coveredFams)+ len(self._famWhereLost[species])))
@@ -435,9 +433,9 @@ class GroupAnnotator(object):
 
     def _encodeParalogClusterId(self, prefix, nr):
         letters = []
-        while nr/26 > 0:
+        while nr//26 > 0:
             letters.append(chr(97+nr%26))
-            nr = nr/26 - 1
+            nr = nr//26 - 1
         letters.append(chr(97+nr%26))
         return prefix+''.join(letters[::-1]) # letters were in reverse order
 
