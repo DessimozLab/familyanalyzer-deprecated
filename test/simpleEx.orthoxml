@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<orthoXML xmlns="http://orthoXML.org/2011/" version="0.3" origin="Family Analyzer Testcase" originVersion="0.2">
+ <notes>
+Example Notes without meaning
+ </notes>
+ <species name="HUMAN" NCBITaxId="9601">
+  <database name="HUMANfake" version="0.1">
+   <genes>
+    <gene id="1" protId="ENSP00000000001" />
+    <gene id="2" protId="ENSP00000000002" />
+    <gene id="3" protId="ENSP00000000003" />
+   </genes>
+  </database>
+ </species>
+ <species name="PANTR" NCBITaxId="9483">
+  <database name="PANTRfake" version="0.1">
+   <genes>
+    <gene id="11" protId="ENSPTRP000000000001" />
+    <gene id="12" protId="ENSPTRP000000000002" />
+    <gene id="13" protId="ENSPTRP000000000003" />
+    <gene id="14" protId="ENSPTRP000000000004" />
+   </genes>
+  </database>
+ </species>
+ <species name="CANFA" NCBITaxId="9615">
+  <database name="CANFAfake" version="0.1">
+   <genes>
+    <gene id="21" protId="ENSCAFG00000000001" />
+    <gene id="22" protId="ENSCAFG00000000002" />
+    <gene id="23" protId="ENSCAFG00000000003" />
+   </genes>
+  </database>
+ </species>
+ <species name="MOUSE" NCBITaxId="10090">
+  <database name="MOUSEfake" version="0.1">
+   <genes>
+    <gene id="31" protId="ENSMUSG00000000001" />
+    <gene id="32" protId="ENSMUSG00000000002" />
+    <gene id="33" protId="ENSMUSG00000000003" />
+    <gene id="34" protId="ENSMUSG00000000004" />
+   </genes>
+  </database>
+ </species>
+ <species name="RATNO" NCBITaxId="10116">
+  <database name="RATNOfake" version="0.1">
+   <genes>
+    <gene id="41" protId="ENSRNOG00000000001" />
+    <gene id="43" protId="ENSRNOG00000000003" />
+   </genes>
+  </database>
+ </species>
+ <species name="XENTR" NCBITaxId="1">
+  <database name="XENTRfake" version="0.1">
+   <genes>
+    <gene id="51" protId="ENSXTRG00000000001" />
+    <gene id="53" protId="ENSXTRG00000000003" />
+   </genes>
+  </database>
+ </species>
+ <groups>
+  <orthologGroup id="1">
+   <property name="TaxRange" value="Vertebrata"/>
+   <geneRef id="51"/>
+   <orthologGroup >
+    <property name="TaxRange" value="Mammalia"/>
+    <geneRef id="21"/>
+    <orthologGroup >
+     <property name="TaxRange" value="Primates"/>
+     <geneRef id="1" />
+     <geneRef id="11" />
+    </orthologGroup>
+    <orthologGroup >
+     <property name="TaxRange" value="Rodens"/>
+     <geneRef id="31" />
+     <geneRef id="41" />
+    </orthologGroup>
+   </orthologGroup>
+  </orthologGroup>
+
+  <orthologGroup id="2">
+   <property name="TaxRange" value="Mammalia"/>
+   <geneRef id="22"/>
+   <orthologGroup >
+    <property name="TaxRange" value="Primates"/>
+    <geneRef id="2" />
+    <geneRef id="12" />
+   </orthologGroup>
+   <geneRef id="32" />
+  </orthologGroup>
+
+  <orthologGroup id="3">
+   <property name="TaxRange" value="Vertebrata"/>
+   <geneRef id="53"/>
+   <orthologGroup >
+    <property name="TaxRange" value="Mammalia"/>
+    <geneRef id="23"/>
+    <paralogGroup>
+     <orthologGroup >
+      <property name="TaxRange" value="Euchloria" />
+      <geneRef id="33"/>
+      <orthologGroup>
+       <property name="TaxRange" value="Primates"/>
+       <geneRef id="3"/>
+       <geneRef id="13"/>
+      </orthologGroup>
+     </orthologGroup>
+     <orthologGroup >
+      <property name="TaxRange" value="Euchloria"/>
+      <geneRef id="34" />
+      <geneRef id="14" />
+     </orthologGroup>
+    </paralogGroup>
+   </orthologGroup>
+  </orthologGroup>
+ </groups>
+</orthoXML>
