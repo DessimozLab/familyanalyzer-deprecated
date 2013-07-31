@@ -160,6 +160,11 @@ class OrthoXMLParser(object):
             self._buildMappings()
         return self._gene2species[id].get(typ)
 
+
+    def _findSubNodes(self, targetNode, root=None):
+        rootNode = root if root is not None else self.root
+        return rootNode.findall(".//{{{0}}}{1}".format(self.ns['ns0'], targetNode))
+
     def _buildMappings(self):
         """
         Builds two dictionaries:
@@ -170,8 +175,8 @@ class OrthoXMLParser(object):
         """
         mapping=dict()
         xref = dict()
-        for species in self.root.findall(".//{{{ns0}}}species".format(**self.ns)):
-            genes = species.findall(".//{{{ns0}}}gene".format(**self.ns))
+        for species in self._findSubNodes("species"):
+            genes = self._findSubNodes("gene", root=species)
             for gene in genes:
                 id=gene.get('id')
                 mapping[gene.get('id')] = species
@@ -181,8 +186,7 @@ class OrthoXMLParser(object):
         self._gene2species=mapping
         self._xrefs = xref
         self._species = frozenset({z.get('name') for z in mapping.values()})
-        self._levels = set(n.get('value') for n in self.root.findall(
-            ".//{{{0}}}property".format(self.ns['ns0'])))
+        self._levels = {n.get('value') for n in self._findSubNodes("property") if n.get('name')=="TaxRange"}
 
     def getUbiquitusFamilies(self, minCoverage=.5):
         families = self.getToplevelGroups();
@@ -199,7 +203,7 @@ class OrthoXMLParser(object):
                 from the family
         """
         genes=collections.defaultdict(set)
-        geneRefs = fam.findall(".//{{{ns0}}}geneRef".format(**self.ns));
+        geneRefs = self._findSubNodes("geneRef",fam)
         for gref in geneRefs:
             gid = gref.get('id')
             sp = self.mapGeneToSpecies(gid)
@@ -440,18 +444,18 @@ class GroupAnnotator(object):
         return prefix+''.join(letters[::-1]) # letters were in reverse order
 
     def _annotateGroupR(self, node, og, idx=0):
-        if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
+        if self.parser.is_ortholog_group(node):
             node.set('og',og)
             for child in list(node):
                 self._annotateGroupR(child, og, idx)
-        elif node.tag=="{{{ns0}}}paralogGroup".format(**self.ns):
+        elif self.parser.is_paralog_group(node):
             idx += 1
             nextOG = "{}.{}".format(og, self._getNextSubId(idx))
             for i, child in enumerate(list(node)):
                 self._annotateGroupR(child, self._encodeParalogClusterId(nextOG,i), idx);
 
     def _addTaxRangeR(self, node, last=None, noUpwardLevels=False):
-        if node.tag=="{{{ns0}}}orthologGroup".format(**self.ns):
+        if self.parser.is_ortholog_group(node):
             levels = {z.get('value') for z in node.findall(
                 './{{{ns0}}}property[@name="TaxRange"]'
                 .format(**self.ns))}
@@ -471,7 +475,7 @@ class GroupAnnotator(object):
             for child in list(node):
                 self._addTaxRangeR(child, mostSpecificLevel)
 
-        elif node.tag=="{{{ns0}}}paralogGroup".format(**self.ns):
+        elif self.parser.is_paralog_group(node):
             for child in list(node):
                 self._addTaxRangeR(child, last)
         
