@@ -22,7 +22,19 @@ import familyanalyzer as fa
 
 class OrthoXMLParserTest(unittest.TestCase):
     def setUp(self):
+        testfile = "test/simpleEx.orthoxml"
         self._op = fa.OrthoXMLParser(testfile)
+
+    def test_nrOfToplevelFamilies(self):
+        self.assertEqual(len(self._op.getToplevelGroups()), 3)
+
+    def test_returnedSpecies(self):
+        expectedSpecies = {'HUMAN','PANTR','MOUSE','RATNO',
+            'CANFA','XENTR'}
+        self.assertSetEqual( self._op.getSpeciesSet(), 
+            expectedSpecies)
+
+
 
 class TaxNodeTest(unittest.TestCase):
     def setUp(self):
