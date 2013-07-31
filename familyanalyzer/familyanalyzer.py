@@ -96,7 +96,7 @@ class OrthoXMLParser(object):
             root = self.root
 
         # Stopping criterion for matching top-level node
-        if (self._is_ortholog_group(root)
+        if (self.is_ortholog_group(root)
             and self._is_at_desired_level(root, level) ):
             subfamilies.append(root)
             return
@@ -111,8 +111,18 @@ class OrthoXMLParser(object):
 
         return subfamilies
 
-    def _is_ortholog_group(self, element):
-        return element.tag == '{http://orthoXML.org/2011/}orthologGroup'
+    def is_ortholog_group(self, element):
+        """Returns true if the passed element is an orthologGroup xml node"""
+        return element.tag == '{{{ns0}}}orthologGroup'.format(**self.ns)
+
+    def is_paralog_group(self, element):
+        """Returns true if the passed element is an paralogGroup xml node"""
+        return element.tag == '{{{ns0}}}paralogGroup'.format(**self.ns)
+
+    def is_evolutionary_node(self, element):
+        """Returns true if the passed element is an evolutionary event xml node,
+        i.e. if it is either an orthologGroup or a paralogGroup element."""
+        return self.is_ortholog_group(element) or self.is_paralog_group(element)
 
     def _is_at_desired_level(self, element, querylevel):
         """
@@ -127,7 +137,7 @@ class OrthoXMLParser(object):
         splitting the level string on '/' and making a set. NB issubset returns
         True when sets are equal.
         """
-        if not self._is_ortholog_group(element): 
+        if not self.is_ortholog_group(element): 
             raise ElementError('Not an orthologGroup node')
             # return False
         if querylevel == 'LUCA':
@@ -176,9 +186,7 @@ class OrthoXMLParser(object):
 
     def getUbiquitusFamilies(self, minCoverage=.5):
         families = self.getToplevelGroups();
-        return filter(
-            lambda x:len(self.getGenesPerSpeciesInFam(x))>=minCoverage*len(self.getSpeciesSet()), 
-            families)
+        return [x for x in families if len(self.getGenesPerSpeciesInFam(x))>=minCoverage*len(self.getSpeciesSet())]
 
     def getLevels(self):
         return self._levels
@@ -200,8 +208,6 @@ class OrthoXMLParser(object):
 
 
     def getFamHistory(self, species=None, level=None):
-        gene2copies = collections.defaultdict(list)
-        famWhereLost = list()
         # assure that orthologGroup xml elements annotated with an 'og' attr
         if self.root.find(".//*[@og]") is None:
             GroupAnnotator(self).annotateDoc()
@@ -213,8 +219,6 @@ class OrthoXMLParser(object):
         return famHist
 
     def getFamHistoryByRecursion(self, species=None, level=None):
-        gene2copies = collections.defaultdict(list)
-        famWhereLost = list()
         # assure that orthologGroup xml elements annotated with an 'og' attr
         if self.root.find(".//*[@og]") is None:
             GroupAnnotator(self).annotateDoc()
@@ -240,14 +244,17 @@ class Taxonomy(object):
         
     def _parseParentChildRelsR(self, grp):
         levels=None
-        if grp.tag=='{{{ns0}}}orthologGroup'.format(**self.parser.ns):
+        if self.parser.is_ortholog_group(grp): 
             levels = [l.get('value') for l in grp.findall('./{{{ns0}}}property[@name="TaxRange"]'
                 .format(**self.parser.ns))]
-        children = filter( lambda x:x.tag in 
-            {"{{{ns0}}}orthologGroup".format(**self.parser.ns), 
-             "{{{ns0}}}paralogGroup".format(**self.parser.ns)},
-            list(grp))
-        subLevs = reduce( set.union, map(self._parseParentChildRelsR, children), set())
+        directChildNodes = list(grp)
+        children = [child for child in directChildNodes if self.parser.is_evolutionary_node(child)]
+
+        # recursivly process childreen nodes
+        subLevs = set()
+        for child in children:
+            subLevs.update(self._parseParentChildRelsR(child))
+
         if levels is not None:
             for parent in levels:
                 for child in subLevs:
@@ -316,7 +323,7 @@ class Taxonomy(object):
         levels = set(levels)
         # count who often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
-        cnts = map( lambda x:len( set(self.iterParents(x)).intersection(levels)), levels)
+        cnts = [len(set(self.iterParents(x)).intersection(levels)) for x in levels]
         levels = list(levels)
         try:
             return levels[cnts.index(len(levels)-1)] 
@@ -331,7 +338,7 @@ class Taxonomy(object):
             self.printSubTreeR(fd, child.name, indent+1)
 
     def __str__(self):
-        import cStringIO as sIO
+        import io as sIO
         fd = sIO.StringIO()
         self.printSubTreeR(fd)
         res = fd.getvalue()
@@ -385,16 +392,16 @@ class FamHistory(object):
                     self._gene2fam[gid] = famId
  
     def _getFamOfGeneIds(self, gids):
-        coveredFams = set(map(lambda x: self._gene2fam.get(x,None), gids))
+        coveredFams = set([self._gene2fam.get(x,None) for x in gids])
         return coveredFams
     
     def write(self):
         print('\nFamily Analysis:')
         for species in self.species:
-            gids = filter(lambda gid:self.parser.mapGeneToSpecies(gid)==species,
-                self.parser.getGeneIds())
-            gids.sort(cmp=lambda x,y:len(self._gene2copies[species][x]) - len(self._gene2copies[species][y]) )
-            coveredFams = set(map(lambda x: self._gene2fam.get(x,None), gids))
+            # get geneIds of genes belonging to this species
+            gids = [gid for gid in self.parser.getGeneIds() if self.parser.mapGeneToSpecies(gid)==species]
+            gids.sort(key=lambda x:len(self._gene2copies[species][x]))
+            coveredFams = set([self._gene2fam.get(x,None) for x in gids])
             print("{} - {} of {} sub-families covered".
                 format(species, len(coveredFams), 
                     len(coveredFams)+ len(self._famWhereLost[species])))
@@ -426,9 +433,9 @@ class GroupAnnotator(object):
 
     def _encodeParalogClusterId(self, prefix, nr):
         letters = []
-        while nr/26 > 0:
+        while nr//26 > 0:
             letters.append(chr(97+nr%26))
-            nr = nr/26 - 1
+            nr = nr//26 - 1
         letters.append(chr(97+nr%26))
         return prefix+''.join(letters[::-1]) # letters were in reverse order
 
