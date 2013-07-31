@@ -9,6 +9,7 @@ Example Notes without meaning
     <gene id="1" protId="HUMAN1" geneId="HUMANg1" />
     <gene id="2" protId="HUMAN2" geneId="HUMANg2" />
     <gene id="3" protId="HUMAN3" geneId="HUMANg3" />
+    <gene id="5" protId="HUMAN5" geneId="HUMANg5" />
    </genes>
   </database>
  </species>

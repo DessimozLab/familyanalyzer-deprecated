@@ -34,7 +34,26 @@ class OrthoXMLParserTest(unittest.TestCase):
         self.assertSetEqual( self._op.getSpeciesSet(), 
             expectedSpecies)
 
+    def test_numberOfGenesPerSpecies(self):
+        expectedCnts = dict(HUMAN=4,PANTR=4,MOUSE=4,RATNO=2,CANFA=3,XENTR=2)
+        allGenes = self._op.getGeneIds()
+        for species in expectedCnts.keys():
+            self.assertEqual( 
+                len([gid for gid in allGenes if self._op.mapGeneToSpecies(gid)==species]),
+                expectedCnts[species],
+                "number of genes not correct for "+species)
 
+    def test_xrefMapping(self):
+        xreftags = dict(protId='',geneId='g')
+        specToOffs = dict(HUMAN=0,PANTR=10,MOUSE=30,RATNO=40,CANFA=20,XENTR=50)
+        allGenes = self._op.getGeneIds()
+        for gid in allGenes:
+            species = self._op.mapGeneToSpecies(gid)
+            for xreftag, prefix in xreftags.items():
+                expectedId = "{}{}{}".format(species, prefix, int(gid)%10)
+                xref = self._op.mapGeneToXRef(gid,xreftag) 
+                self.assertEqual( xref, expectedId,
+                    "xrefmapping failed for {}: {} vs {}".format(gid, xref, expectedId) )
 
 class TaxNodeTest(unittest.TestCase):
     def setUp(self):
