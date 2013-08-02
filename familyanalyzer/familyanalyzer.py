@@ -226,7 +226,6 @@ class OrthoXMLParser(object):
 
         famHist = FamHistory(self, species, level)
         for fam in self.getSubFamilies(level):
-            genesInFam = self.getGenesPerSpeciesInFam(fam)
             famHist.addFamily(fam)
         return famHist
 
@@ -237,7 +236,6 @@ class OrthoXMLParser(object):
 
         famHist = FamHistory(self, species, level)
         for fam in self.getSubFamiliesByRecursion(level):
-            genesInFam = self.getGenesPerSpeciesInFam(fam)
             famHist.addFamily(fam)
         return famHist
 
