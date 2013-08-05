@@ -117,11 +117,15 @@ class OrthoXMLParser(object):
         return subfamilies
 
     def is_ortholog_group(self, element):
-        """Returns true if the passed element is an orthologGroup xml node"""
+        """
+        Returns true if the passed element is an orthologGroup xml node
+        """
         return element.tag == '{{{ns0}}}orthologGroup'.format(**self.ns)
 
     def is_paralog_group(self, element):
-        """Returns true if the passed element is an paralogGroup xml node"""
+        """
+        Returns true if the passed element is an paralogGroup xml node
+        """
         return element.tag == '{{{ns0}}}paralogGroup'.format(**self.ns)
 
     def is_evolutionary_node(self, element):
@@ -547,9 +551,6 @@ if __name__ == "__main__":
         print(tax)
 
     GroupAnnotator(op).annotateMissingTaxRanges(tax, propagate_top=args.propagate_top)
-    #print op.getSubFamilies("mouse2_mouse")
-    #for fam in op.getUbiquitusFamilies(minCoverage=.75):
-    #    print fam.get('id');
 
     if args.use_recursion:
         hist = op.getFamHistoryByRecursion(args.species, args.level)
