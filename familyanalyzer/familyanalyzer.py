@@ -116,24 +116,27 @@ class OrthoXMLParser(object):
 
         return subfamilies
 
-    def is_ortholog_group(self, element):
+    @classmethod
+    def is_ortholog_group(cls, element):
         """
         Returns true if the passed element is an orthologGroup xml node
         """
-        return element.tag == '{{{ns0}}}orthologGroup'.format(**self.ns)
+        return element.tag == '{{{ns0}}}orthologGroup'.format(**cls.ns)
 
-    def is_paralog_group(self, element):
+    @classmethod
+    def is_paralog_group(cls, element):
         """
         Returns true if the passed element is an paralogGroup xml node
         """
-        return element.tag == '{{{ns0}}}paralogGroup'.format(**self.ns)
+        return element.tag == '{{{ns0}}}paralogGroup'.format(**cls.ns)
 
-    def is_evolutionary_node(self, element):
+    @classmethod
+    def is_evolutionary_node(cls, element):
         """Returns true if the passed element is an evolutionary event
         xml node, i.e. if it is either an orthologGroup or a
         paralogGroup element."""
-        return (self.is_ortholog_group(element) or
-                self.is_paralog_group(element))
+        return (cls.is_ortholog_group(element) or
+                cls.is_paralog_group(element))
 
     def _is_at_desired_level(self, element, querylevel):
         """Tests if the element is at a taxonomic level equal to or
@@ -259,13 +262,13 @@ class Taxonomy(object):
 
     def _parseParentChildRelsR(self, grp):
         levels = None
-        if self.parser.is_ortholog_group(grp):
+        if OrthoXMLParser.is_ortholog_group(grp):
             levels = [l.get('value') for l in grp.findall(
                 './{{{ns0}}}property[@name="TaxRange"]'
-                .format(**self.parser.ns))]
+                .format(**OrthoXMLParser.ns))]
         directChildNodes = list(grp)
         children = [child for child in directChildNodes
-                    if self.parser.is_evolutionary_node(child)]
+                    if OrthoXMLParser.is_evolutionary_node(child)]
 
         # recursivly process childreen nodes
         subLevs = set()
@@ -280,12 +283,10 @@ class Taxonomy(object):
         return subLevs
 
     def extractAdjacencies(self, parser):
-        self.parser = parser
         self.adj = set()
         for grp in parser.getToplevelGroups():
             self._parseParentChildRelsR(grp)
 
-        del self.parser
         self.nodes = set(itertools.chain(*self.adj))
 
     def bloat_all(self):
