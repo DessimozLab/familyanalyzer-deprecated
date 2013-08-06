@@ -381,6 +381,21 @@ class TaxNode(object):
         self.up = p
 
 
+class GeneFamily(object):
+    """GeneFamily(root_element)
+
+    represents one gene family rooted at an orthologous group. """
+
+    def __init__(self, root_element):
+        if not OrthoXMLParser.is_ortholog_group(root_element):
+            raise ElementError('Not an orthologGroup node')
+        self.root = root_element
+
+    def getMemberGenes(self):
+        return self.root.findall('.//{{{ns0}}}geneRef'.
+                format(**OrthoXMLParser.ns))
+
+
 class FamHistory(object):
     XRefTag = None
 

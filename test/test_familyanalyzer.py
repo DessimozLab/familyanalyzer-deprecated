@@ -19,11 +19,15 @@ import familyanalyzer as fa
 #    def tearDown(self):
 #        self._reader.close()
 
+class SetupHelper(object):
+    @staticmethod
+    def createOrthoXMLParserFromSimpleEx():
+        filename = "test/simpleEx.orthoxml"
+        return fa.OrthoXMLParser(filename)
 
 class OrthoXMLParserTest(unittest.TestCase):
     def setUp(self):
-        testfile = "test/simpleEx.orthoxml"
-        self._op = fa.OrthoXMLParser(testfile)
+        self._op = SetupHelper.createOrthoXMLParserFromSimpleEx()
 
     def test_nrOfToplevelFamilies(self):
         self.assertEqual(len(self._op.getToplevelGroups()), 3)
@@ -89,6 +93,38 @@ class TaxNodeTest(unittest.TestCase):
         self.assertRaises(fa.TaxonomyInconsistencyError,
                           self.child.addParent,
                           extraNode)
+
+
+class GeneFamilyTest(unittest.TestCase):
+    
+    def getLastExampleFamily(self):
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        fam = parser.getToplevelGroups()[-1]
+        return(fam)
+
+    def test_onlyOrthologGroup(self):
+        fam = self.getLastExampleFamily()
+        paralogNode = fam.find(".//{{{ns0}}}paralogGroup".
+                format(**fa.OrthoXMLParser.ns))
+        self.assertRaises(fa.ElementError, fa.GeneFamily, paralogNode)
+
+    def test_members(self):
+        fam = self.getLastExampleFamily()
+        expectedMembers = {'3','13','23','33','53','14','34'}
+        gf = fa.GeneFamily(fam)
+        members = set(x.get('id') for x in gf.getMemberGenes())
+        self.assertSetEqual(expectedMembers, members)
+
+    def membSubSetsAtLevel(self, fam, level):
+        gf = fa.GeneFamily(fam)
+        levelAnalysis = gf.analyzeLevel(level)
+        return levelAnalysis.geneClasses()
+
+    def test_humanMemberSubSetsAtPrimates(self):
+        fam = self.getLastExampleFamily()
+        geneClasses = self.membSubSetsAtLevel(fam, 'Primates')
+
+
 
 
 class SimpleTaxonomyTest(unittest.TestCase):
