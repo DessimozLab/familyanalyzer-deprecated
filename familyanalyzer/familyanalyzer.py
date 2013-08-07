@@ -25,14 +25,16 @@ class OrthoXMLParser(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
 
     def __init__(self, filename):
-        """creates a OrthoXMLParser object. the parameter filename needs to
-        be a path pointing to the orthoxml file to be analyzed."""
+        """creates a OrthoXMLParser object. the parameter filename 
+        needs to be a path pointing to the orthoxml file to be 
+        analyzed."""
         self.doc = etree.parse(filename)
         self.root = self.doc.getroot()
 
         self._buildMappings()   # builds three dictionaries - see def below
 
     def write(self, filename):
+        """Write out the (modified) orthoxml file into a new file."""
         self.doc.write(filename)
 
     def mapGeneToXRef(self, id, typ='geneId'):
@@ -394,6 +396,12 @@ class GeneFamily(object):
     def getMemberGenes(self):
         return self.root.findall('.//{{{ns0}}}geneRef'.
                 format(**OrthoXMLParser.ns))
+
+    def analyzeLevel(self, level):
+        """analyze the structure of the family at a given taxonomic
+        level. 
+        returns a LevelAnalysis object"""
+        
 
 
 class FamHistory(object):
