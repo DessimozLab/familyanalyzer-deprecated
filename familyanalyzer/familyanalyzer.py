@@ -285,16 +285,85 @@ class OrthoXMLParser(object):
             famHist.addFamily(fam)
         return famHist
 
+    def augmentTaxonomyInfo(self, tax, propagate_top):
+        """Assign a taxonomy to the orthoxml file. this taxonomy
+        is used to augment the xml with the relevant level infos
+        as 'TaxRange' property tags in orthologGroup elements.
+
+        The propagate_top parameter can be should be used to enable
+        or disable the propagation of all the levels which are 
+        older than the families topmost level. In other words, if 
+        enabled, all families arouse at LUCA, otherwise families 
+        can be invented later on in evolution."""
+        if self.tax is not None:
+            raise Exception("a taxonomy can be assigned only once")
+        self.tax = tax
+        GroupAnnotator(op).annotateMissingTaxRanges(tax, propagate_top)
+
+
 
 class TaxonomyInconsistencyError(Exception):
     pass
 
 
-class Taxonomy(object):
-    def fromXML(self, filename):
-        pass
+class TaxonomyFactory(object):
+    @classmethod
+    def newTaxonomy(cls, arg):
+        if isinstance(arg,str):
+            if arg.endswith('.xml'):
+                return XMLTaxonomy(arg)
+        elif isinstance(arg, OrthoXMLParser):
+            return TaxRangeOrthoXMLTaxonomy(arg)
+        else:
+            raise NotImplementedError("unknown type of Taxonomy")
 
-    def buildFromOrthoXMLParser(self, parser):
+
+class Taxonomy(object):
+    def __init__(self):
+        raise Exception("abstract class")
+
+    def iterParents(self, node, stopBefor=None):
+        if node == stopBefor:
+            return
+        tn = self.hierarchy[node]
+        while tn.up is not None and tn.up.name != stopBefor:
+            tn = tn.up
+            yield tn.name
+
+    def mostSpecific(self, levels):
+        levels = set(levels)
+        # count who often each element is a child of any other one.
+        # the one with len(levels)-1 is the most specific level
+        cnts = [len(set(self.iterParents(x)).intersection(levels)) for x in levels]
+        levels = list(levels)
+        try:
+            return levels[cnts.index(len(levels)-1)]
+        except:
+            raise Exception("Non of the element is subelement of all others")
+
+    def printSubTreeR(self, fd, lev=None, indent=0):
+        if lev is None:
+            lev = self.root
+        fd.write("{}{}\n".format(" "*2*indent, lev))
+        for child in self.hierarchy[lev].down:
+            self.printSubTreeR(fd, child.name, indent+1)
+
+    def __str__(self):
+        import io as sIO
+        fd = sIO.StringIO()
+        self.printSubTreeR(fd)
+        res = fd.getvalue()
+        fd.close()
+        return res
+
+
+class XMLTaxonomy(Taxonomy):
+    def __init__(self, filename):
+        raise NotImplementedError("XML Taxonomys have not yet been implemented")
+
+
+class TaxRangeOrthoXMLTaxonomy(Taxonomy):
+    def __init__(self, parser):
         self.extractAdjacencies(parser)
         self.bloat_all()
         self.extractHierarchy()
@@ -366,40 +435,6 @@ class Taxonomy(object):
             if (first, node) in self.adj and (node, second) in self.adj:
                 return False
         return True
-
-    def iterParents(self, node, stopBefor=None):
-        if node == stopBefor:
-            return
-        tn = self.hierarchy[node]
-        while tn.up is not None and tn.up.name != stopBefor:
-            tn = tn.up
-            yield tn.name
-
-    def mostSpecific(self, levels):
-        levels = set(levels)
-        # count who often each element is a child of any other one.
-        # the one with len(levels)-1 is the most specific level
-        cnts = [len(set(self.iterParents(x)).intersection(levels)) for x in levels]
-        levels = list(levels)
-        try:
-            return levels[cnts.index(len(levels)-1)]
-        except:
-            raise Exception("Non of the element is subelement of all others")
-
-    def printSubTreeR(self, fd, lev=None, indent=0):
-        if lev is None:
-            lev = self.root
-        fd.write("{}{}\n".format(" "*2*indent, lev))
-        for child in self.hierarchy[lev].down:
-            self.printSubTreeR(fd, child.name, indent+1)
-
-    def __str__(self):
-        import io as sIO
-        fd = sIO.StringIO()
-        self.printSubTreeR(fd)
-        res = fd.getvalue()
-        fd.close()
-        return res
 
 
 class TaxNode(object):
@@ -601,11 +636,10 @@ if __name__ == "__main__":
     print("; ".join(op.getSpeciesSet()))
     print("--> analyzing " + "; ".join(args.species))
 
-    tax = Taxonomy()
     if args.taxonomy == "implicit":
-        tax.buildFromOrthoXMLParser(op)
+        tax = TaxonomyFactory.newTaxonomy(op)
     else:
-        tax.buildFromXML(args.taxonomy)
+        tax = TaxonomyFactory.newTaxonomy(args.taxonomy)
 
     if args.show_taxonomy:
         print("Use following taxonomy")

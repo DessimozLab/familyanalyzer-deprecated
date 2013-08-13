@@ -1,24 +1,6 @@
 import unittest
 import familyanalyzer as fa
 
-#class ToyExampleTestCase(unittest.TestCase):
-#    _fname=None
-#
-#    @classmethod
-#    def setUpClass(cls):
-#        cls._fname = tempfile.mktemp(suffix=".h5")
-#        setupH5File(cls._fname)
-#
-#    @classmethod
-#    def tearDownClass(cls):
-#        destroyH5File(cls._fname)
-#
-#    def setUp(self):
-#        self._reader = siblings.Reader(self._fname)
-#
-#    def tearDown(self):
-#        self._reader.close()
-
 class SetupHelper(object):
     @staticmethod
     def createOrthoXMLParserFromSimpleEx():
@@ -125,6 +107,17 @@ class GeneFamilyTest(unittest.TestCase):
         geneClasses = self.membSubSetsAtLevel(fam, 'Primates')
 
 
+class TaxonomyFactoryTest(unittest.TestCase):
+    
+    def test_xmlTaxonomyNotImpl(self):
+        self.assertRaises(NotImplementedError,
+                fa.TaxonomyFactory.newTaxonomy,
+                "test/taxEx.xml")
+
+    def test_taxFromOrthoXMLParser(self):
+        p = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        tax = fa.TaxonomyFactory.newTaxonomy(p)
+        self.assertSetEqual(set(tax.hierarchy.keys()), p.getLevels())
 
 
 class SimpleTaxonomyTest(unittest.TestCase):
