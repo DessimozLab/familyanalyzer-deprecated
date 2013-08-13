@@ -21,6 +21,43 @@ class ElementError(Exception):
         return str(self.msg)
 
 
+class OrthoXMLQuery(object):
+    ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
+    
+    @classmethod
+    def getToplevelOrthologGroups(cls, root):
+        xquery = ".//{{{ns0}}}groups/{{{ns0}}}orthologGroup".format(**cls.ns)
+        return root.findall(xquery)
+
+    @classmethod
+    def getGeneFromId(cls,id_,root):
+        xquery = ".*//{{{}}}gene[@id='{}']".format(cls.ns['ns0'], id_)
+        return root.findall(xquery)
+
+    @classmethod
+    def getXXX(cls,root):
+        xquery = ".//"
+        return root.findall(xquery)
+
+    @classmethod
+    def getGroupsAtLevel(cls, level, root):
+        """returns a list with the orthologGroup elements which have a 
+        TaxRange property equals to the requested level."""
+        xquery = (".//{{{0}}}property[@name='TaxRange'][@value='{1}']/..".
+                  format(cls.ns['ns0'], level))
+        return root.findall(xquery)
+
+    @classmethod
+    def getSubNodes(cls, targetNode, root, recursivly=True):
+        """method which returns a list of all (if recursively 
+        is set to true) or only the direct children nodes
+        having 'targetNode' as their tagname. The namespace is 
+        added to the tagname."""
+        xPrefix = ".//" if recursivly else "./"
+        xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
+        return root.findall(xquery)
+        
+
 class OrthoXMLParser(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
 
@@ -37,21 +74,20 @@ class OrthoXMLParser(object):
         """Write out the (modified) orthoxml file into a new file."""
         self.doc.write(filename)
 
-    def mapGeneToXRef(self, id, typ='geneId'):
+    def mapGeneToXRef(self, id_, typ='geneId'):
         """
-        Looks up id (integer id number as a string) and type in self._xrefs
+        Looks up id_ (integer id_ number as a string) and type in self._xrefs
         dictionary (aka self._xrefs)
         Returns lookup value, which is a gene name
         """
         if typ is None:
-            res = id
+            res = id_
         else:
-            tup = (id, typ)
+            tup = (id_, typ)
             res = self._xrefs.get(tup, None)
             if res is None:
                 # fallback, if not in dict
-                gene = self.root.find('.*//{{{}}}gene[@id="{}"]'.
-                                      format(self.ns['ns0'], id))
+                gene = OrthoXMLQuery.getGeneFromId(id_)
                 # return desired ID typ, otherwise whole element
                 if typ is not None:
                     res = gene.get(typ, gene)
@@ -68,8 +104,7 @@ class OrthoXMLParser(object):
     def getToplevelGroups(self):
         """A function yielding the toplevel orthologGroups from the file.
         This corresponds to gene families for the purpose of this project."""
-        return self.root.findall(".//{{{ns0}}}groups/{{{ns0}}}orthologGroup".
-                                 format(**self.ns))
+        return OrthoXMLQuery.getToplevelOrthologGroups(self.root)
 
     def getSubFamilies(self, level, root=None):
         """return a forest of orthologGroup nodes with roots at the
@@ -80,9 +115,7 @@ class OrthoXMLParser(object):
         if root is None:
             root = self.root
 
-        return root.findall(
-            ".//{{{0}}}property[@name='TaxRange'][@value='{1}']/..".
-            format(self.ns['ns0'], level))
+        return OrthoXMLQuery.getGroupsAtLevel(level, root)
 
     def getSubFamiliesByRecursion(self, level, root=None, subfamilies=None):
         """return a forest of orthologGroup nodes with roots at the
@@ -167,16 +200,19 @@ class OrthoXMLParser(object):
         level = set(level.split('/'))
         return level.issubset(querylevel)
 
-    def mapGeneToSpecies(self, id, typ='name'):
+    def mapGeneToSpecies(self, id_, typ='name'):
         """
         Does a lookup in the self._gene2species dict:
         key = idnum, return = species name
         """
         if self._gene2species is None:
             self._buildMappings()
-        return self._gene2species[id].get(typ)
+        return self._gene2species[id_].get(typ)
 
     def _findSubNodes(self, targetNode, root=None):
+        """return all (recursively) found elements with tagname 
+        'targetNode' below the root element. If no root element 
+        is provided, search starts at the document root."""
         rootNode = root if root is not None else self.root
         return rootNode.findall(".//{{{0}}}{1}".
                                 format(self.ns['ns0'], targetNode))
@@ -194,16 +230,17 @@ class OrthoXMLParser(object):
         for species in self._findSubNodes("species"):
             genes = self._findSubNodes("gene", root=species)
             for gene in genes:
-                id = gene.get('id')
-                mapping[gene.get('id')] = species
+                id_ = gene.get('id')
+                mapping[id_] = species
                 for tag in gene.keys():
                     if tag != "id":
-                        xref[(id, tag)] = gene.get(tag)
+                        xref[(id_, tag)] = gene.get(tag)
         self._gene2species = mapping
         self._xrefs = xref
         self._species = frozenset({z.get('name') for z in mapping.values()})
-        self._levels = {n.get('value') for n in self._findSubNodes("property")
-                        if n.get('name') == "TaxRange"}
+        self._levels = frozenset({n.get('value') 
+            for n in self._findSubNodes("property")
+            if n.get('name') == "TaxRange"})
 
     def getUbiquitusFamilies(self, minCoverage=.5):
         families = self.getToplevelGroups()
@@ -386,7 +423,7 @@ class TaxNode(object):
 class GeneFamily(object):
     """GeneFamily(root_element)
 
-    represents one gene family rooted at an orthologous group. """
+    Represents one gene family rooted at an orthologous group. """
 
     def __init__(self, root_element):
         if not OrthoXMLParser.is_ortholog_group(root_element):
