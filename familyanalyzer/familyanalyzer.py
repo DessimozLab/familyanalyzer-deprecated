@@ -45,24 +45,25 @@ class OrthoXMLQuery(object):
 
     @classmethod
     def getSubNodes(cls, targetNode, root, recursivly=True):
-        """method which returns a list of all (if recursively 
+        """method which returns a list of all (if recursively
         is set to true) or only the direct children nodes
-        having 'targetNode' as their tagname. The namespace is 
+        having 'targetNode' as their tagname. The namespace is
         added to the tagname."""
         xPrefix = ".//" if recursivly else "./"
         xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
         return root.findall(xquery)
-        
+
 
 class OrthoXMLParser(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
 
     def __init__(self, filename):
-        """creates a OrthoXMLParser object. the parameter filename 
-        needs to be a path pointing to the orthoxml file to be 
+        """creates a OrthoXMLParser object. the parameter filename
+        needs to be a path pointing to the orthoxml file to be
         analyzed."""
         self.doc = etree.parse(filename)
         self.root = self.doc.getroot()
+        self.tax = None
 
         self._buildMappings()   # builds three dictionaries - see def below
 
@@ -94,8 +95,11 @@ class OrthoXMLParser(object):
     def getSpeciesSet(self):
         return self._species  # all species in the xml tree
 
-    def getGeneIds(self):
-        return self._gene2species.keys()
+    def getGeneIds(self, speciesFilter=None, tag="name"):
+        genes = list(self._gene2species.keys())
+        if speciesFilter is not None:
+            genes = [g for g in genes if self._gene2species[g].get(tag, None) in speciesFilter]
+        return genes
 
     def getToplevelGroups(self):
         """A function yielding the toplevel orthologGroups from the file.
@@ -206,8 +210,8 @@ class OrthoXMLParser(object):
         return self._gene2species[id_].get(typ)
 
     def _findSubNodes(self, targetNode, root=None):
-        """return all (recursively) found elements with tagname 
-        'targetNode' below the root element. If no root element 
+        """return all (recursively) found elements with tagname
+        'targetNode' below the root element. If no root element
         is provided, search starts at the document root."""
         rootNode = root if root is not None else self.root
         return rootNode.findall(".//{{{0}}}{1}".
@@ -234,7 +238,7 @@ class OrthoXMLParser(object):
         self._gene2species = mapping
         self._xrefs = xref
         self._species = frozenset({z.get('name') for z in mapping.values()})
-        self._levels = frozenset({n.get('value') 
+        self._levels = frozenset({n.get('value')
             for n in self._findSubNodes("property")
             if n.get('name') == "TaxRange"})
 
@@ -261,15 +265,13 @@ class OrthoXMLParser(object):
             genes[sp].add(gid)
         return genes
 
-    def getFamHistory(self, species=None, level=None):
+    def getFamHistory(self):
         # assure that orthologGroup xml elements annotated with an 'og' attr
         if self.root.find(".//*[@og]") is None:
             GroupAnnotator(self).annotateDoc()
 
-        famHist = FamHistory(self, species, level)
-        for fam in self.getSubFamilies(level):
-            famHist.addFamily(fam)
-        return famHist
+        analyzer = LevelAnalysisFactory().newLevelAnalysis(self)
+        return FamHistory(self, analyzer)
 
     def getFamHistoryByRecursion(self, species=None, level=None):
         # assure that orthologGroup xml elements annotated with an 'og' attr
@@ -287,15 +289,14 @@ class OrthoXMLParser(object):
         as 'TaxRange' property tags in orthologGroup elements.
 
         The propagate_top parameter can be should be used to enable
-        or disable the propagation of all the levels which are 
-        older than the families topmost level. In other words, if 
-        enabled, all families arouse at LUCA, otherwise families 
+        or disable the propagation of all the levels which are
+        older than the families topmost level. In other words, if
+        enabled, all families arouse at LUCA, otherwise families
         can be invented later on in evolution."""
         if self.tax is not None:
             raise Exception("a taxonomy can be assigned only once")
         self.tax = tax
-        GroupAnnotator(op).annotateMissingTaxRanges(tax, propagate_top)
-
+        GroupAnnotator(self).annotateMissingTaxRanges(tax, propagate_top)
 
 
 class TaxonomyInconsistencyError(Exception):
@@ -305,7 +306,7 @@ class TaxonomyInconsistencyError(Exception):
 class TaxonomyFactory(object):
     @classmethod
     def newTaxonomy(cls, arg):
-        if isinstance(arg,str):
+        if isinstance(arg, str):
             if arg.endswith('.xml'):
                 return XMLTaxonomy(arg)
         elif isinstance(arg, OrthoXMLParser):
@@ -454,80 +455,174 @@ class GeneFamily(object):
     """GeneFamily(root_element)
 
     Represents one gene family rooted at an orthologous group. """
-
     def __init__(self, root_element):
         if not OrthoXMLParser.is_ortholog_group(root_element):
             raise ElementError('Not an orthologGroup node')
         self.root = root_element
 
     def getMemberGenes(self):
-        return self.root.findall('.//{{{ns0}}}geneRef'.
+        members = self.root.findall('.//{{{ns0}}}geneRef'.
                 format(**OrthoXMLParser.ns))
+        return [x.get('id') for x in members]
+
+    def getFamId(self):
+        return self.root.get('og')
 
     def analyzeLevel(self, level):
         """analyze the structure of the family at a given taxonomic
-        level. 
-        returns a LevelAnalysis object"""
-        
+        level.
+        returns a list of LevelAnalysis object, one per sub-family"""
+
+        subFamNodes = OrthoXMLQuery.getGroupsAtLevel(level, self.root)
+        subFams = [GeneFamily(fam) for fam in subFamNodes]
+        return subFams
+
+    def analyze(self, strategy):
+        self.summary = strategy.analyzeGeneFam(self)
+
+    def write(self, fd, speciesFilter=None, idFormatter=lambda x: x):
+        species = list(self.summary.keys())
+        if speciesFilter is not None:
+            species = [g for g in species if g in speciesFilter]
+        for spec in self.summary.keys():
+            if not spec in species:
+                continue
+            for sumElem in self.summary[spec]:
+                refs = "; ".join([idFormatter(gid) for gid in sumElem.genes])
+                fd.write("{}\t{}\t{}\t{}:{}\n".format(
+                    self.getFamId(), spec, len(sumElem.genes),
+                    sumElem.typ, refs))
+
+
+class Singletons(GeneFamily):
+    def __init__(self, element):
+        memb = set()
+        if isinstance(element, str):
+            memb.add(element)
+        else:
+            memb.update(element)
+        self.members = memb
+
+    def getMemberGenes(self):
+        return self.members
+
+    def getFamId(self):
+        return "n/a"
+
+    def analyzeLevel(self, level, parser):
+        return self
+
+    def analyze(self, strategy):
+        super().analyze(strategy)
+        for specSum in self.summary.values():
+            for sumElement in specSum:
+                sumElement.typ = "SINGLETON"
+
+
+def enum(*sequential, **named):
+    """creates an Enum type with given values"""
+    enums = dict(zip(sequential, range(len(sequential))), **named)
+    enums['reverse'] = dict((value, key) for key, value in enums.items())
+    return type('Enum', (object, ), enums)
+
+
+class SummaryOfSpecies(object):
+    def __init__(self, typ, genes):
+        self.typ = typ
+        self.genes = genes
+
+
+class LevelAnalysisFactory(object):
+    def __init__(self):
+        pass
+
+    def newLevelAnalysis(self, parser):
+        """return a the appropriate LevelAnalysis instance based on
+        the presents/absence of a taxonomy in the parser"""
+        if parser.tax is None:
+            return BasicLevelAnalysis(parser)
+        else:
+            return TaxAwareLevelAnalysis(parser, parser.tax)
+
+
+class BasicLevelAnalysis(object):
+    GeneClasses = enum("MULTICOPY", "SINGLECOPY", "ANCIENT_BUT_LOST", "LATER_GAINED", "SINGLETON")
+
+    def __init__(self, parser):
+        self.parser = parser
+
+    def analyzeGeneFam(self, fam):
+        spec2genes = collections.defaultdict(set)
+        for geneId in fam.getMemberGenes():
+            spec = self.parser.mapGeneToSpecies(geneId)
+            spec2genes[spec].add(geneId)
+        summary = dict()
+        for spec in iter(spec2genes.keys()):
+            nrMemb = len(spec2genes[spec])
+            gclass = self.GeneClasses.MULTICOPY if nrMemb > 1 else self.GeneClasses.SINGLECOPY
+            summary[spec] = [SummaryOfSpecies(self.GeneClasses.reverse[gclass],
+                                              spec2genes[spec])]
+        return summary
+
+
+class TaxAwareLevelAnalysis(BasicLevelAnalysis):
+    def __init__(self, parser, tax):
+        super().__init__(parser)
+        self.tax = tax
+
+    def analyzeGeneFam(self, fam):
+        return super().analyzeGeneFam(fam)
 
 
 class FamHistory(object):
     XRefTag = None
 
-    def __init__(self, parser, species, level):
+    def __init__(self, parser, analyzer):
         self.parser = parser
-        self.species = set(species)
-        self.level = level
-        self._gene2copies = dict()
-        for g in self.species:
-            self._gene2copies[g] = collections.defaultdict(list)
-        self._gene2fam = dict()
-        self._famWhereLost = collections.defaultdict(list)
+        self.analyzer = analyzer
 
     def setXRefTag(self, tag):
         self.XRefTag = tag
 
-    def addFamily(self, fam):
-        genesPerSpec = self.parser.getGenesPerSpeciesInFam(fam)
-        famId = fam.get('og')
-        for species in self.species:
-            gids = genesPerSpec.get(species)
-            if gids is None:
-                self._famWhereLost[species].append(famId)
-            else:
-                for gid in gids:
-                    self._gene2copies[species][gid] = gids
-                    self._gene2fam[gid] = famId
+    def analyzeLevel(self, level):
+        gfamList = list()
+        for fam in self.parser.getToplevelGroups():
+            gfamList.extend(GeneFamily(fam).analyzeLevel(level))
 
-    def _getFamOfGeneIds(self, gids):
-        coveredFams = set([self._gene2fam.get(x, None) for x in gids])
-        return coveredFams
+        gene2FamIdx = dict()
+        specInTaxRange = set()
+        for idx, gfam in enumerate(gfamList):
+            gfam.analyze(self.analyzer)
+            specInTaxRange.update(gfam.summary.keys())
+            for mem in gfam.getMemberGenes():
+                gene2FamIdx[mem] = idx
+        # get genes in taxrange not belonging to any family. those are
+        # considered to be singletons and added to a special GeneFamily.
+        allGenesInRange = self.parser.getGeneIds(speciesFilter=specInTaxRange)
+        singletonsSet = set(allGenesInRange).difference(gene2FamIdx.keys())
+        singletons = Singletons(singletonsSet)
+        singletons.analyze(self.analyzer)
 
-    def write(self):
-        print('\nFamily Analysis:')
-        for species in self.species:
-            # get geneIds of genes belonging to this species
-            gids = [gid for gid in self.parser.getGeneIds() if
-                    self.parser.mapGeneToSpecies(gid) == species]
-            gids.sort(key=lambda x: len(self._gene2copies[species][x]))
-            coveredFams = set([self._gene2fam.get(x, None) for x in gids])
-            print("{} - {} of {} sub-families covered".
-                  format(species, len(coveredFams), len(coveredFams) +
-                         len(self._famWhereLost[species])))
-            for gid in gids:
-                if len(self._gene2copies[species][gid]) <= 0:
-                    print(" {}: n/a (singleton not in any family)".
-                          format(self.parser.mapGeneToXRef(gid, self.XRefTag)))
-                else:
-                    args = dict(
-                        gXref=self.parser.mapGeneToXRef(gid, self.XRefTag),
-                        famId=self._gene2fam[gid],
-                        cnt=len(self._gene2copies[species][gid]),
-                        sib=";".join([self.parser.mapGeneToXRef(z, self.XRefTag)
-                                     for z in self._gene2copies[species][gid]]))
-                    print(" {gXref}: {famId} ({cnt}): {sib}".format(**args))
-            for fam in self._famWhereLost[species]:
-                print(" n/a: {} (0) no member in subfamily".format(fam))
+        gfamList.append(singletons)
+        for singleton in singletonsSet:
+            gene2FamIdx[singleton] = len(gfamList)-1
+
+        self.geneFamList = gfamList
+        self.gene2FamIdx = gene2FamIdx
+        self.analyzedLevel = level
+
+    def write(self, fd, speciesFilter=None):
+        fd.write("FamilyAnalysis at {}\n".format(self.analyzedLevel))
+        for fam in self.geneFamList:
+            fam.write(fd, speciesFilter, idFormatter=lambda gid:
+                    self.parser.mapGeneToXRef(gid, self.XRefTag))
+
+    def __str__(self):
+        fd = io.StringIO()
+        self.write(fd)
+        res = fd.getvalue()
+        fd.close()
+        return res
 
 
 class GroupAnnotator(object):
@@ -640,14 +735,16 @@ if __name__ == "__main__":
         print("Use following taxonomy")
         print(tax)
 
-    GroupAnnotator(op).annotateMissingTaxRanges(tax, propagate_top=args.propagate_top)
+    # add taxonomy to parser
+    op.augmentTaxonomyInfo(tax, args.propagate_top)
 
     if args.use_recursion:
         hist = op.getFamHistoryByRecursion(args.species, args.level)
     else:
-        hist = op.getFamHistory(args.species, args.level)
+        hist = op.getFamHistory()
+        hist.analyzeLevel(args.level)
     hist.setXRefTag(args.xreftag)
-    hist.write()
+    hist.write(sys.stdout, speciesFilter=args.species)
 
     if args.store_augmented_xml is not None:
         op.write(args.store_augmented_xml)

@@ -1,11 +1,13 @@
 import unittest
 import familyanalyzer as fa
 
+
 class SetupHelper(object):
     @staticmethod
     def createOrthoXMLParserFromSimpleEx():
         filename = "test/simpleEx.orthoxml"
         return fa.OrthoXMLParser(filename)
+
 
 class OrthoXMLParserTest(unittest.TestCase):
     def setUp(self):
@@ -30,6 +32,15 @@ class OrthoXMLParserTest(unittest.TestCase):
                     if self._op.mapGeneToSpecies(gid) == species]),
                 expectedCnts[species],
                 "number of genes not correct for "+species)
+
+    def test_numberOfGenesPerSpecies_specFilter(self):
+        expectedCnts = dict(HUMAN=4, PANTR=4, MOUSE=4, RATNO=2,
+                            CANFA=3, XENTR=2)
+        param_list = [{'HUMAN'}, {'XENTR'}, {'PANTR', 'MOUSE'}, {}]
+        for param in param_list:
+            expected = sum([expectedCnts[z] for z in param])
+            returned = len(self._op.getGeneIds(speciesFilter=param))
+            self.assertEqual(expected, returned, 'failed with {}'.format(param))
 
     def test_xrefMapping(self):
         xreftags = dict(protId='', geneId='g')
@@ -78,41 +89,43 @@ class TaxNodeTest(unittest.TestCase):
 
 
 class GeneFamilyTest(unittest.TestCase):
-    
-    def getLastExampleFamily(self):
-        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+
+    def getLastExampleFamily(self, parser=None):
+        if parser is None:
+            parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
         fam = parser.getToplevelGroups()[-1]
         return(fam)
 
     def test_onlyOrthologGroup(self):
         fam = self.getLastExampleFamily()
-        paralogNode = fam.find(".//{{{ns0}}}paralogGroup".
-                format(**fa.OrthoXMLParser.ns))
+        paralogNode = fam.find(".//{{{ns0}}}paralogGroup".format(**fa.OrthoXMLParser.ns))
         self.assertRaises(fa.ElementError, fa.GeneFamily, paralogNode)
 
     def test_members(self):
         fam = self.getLastExampleFamily()
-        expectedMembers = {'3','13','23','33','53','14','34'}
+        expectedMembers = {'3', '13', '23', '33', '53', '14', '34'}
         gf = fa.GeneFamily(fam)
-        members = set(x.get('id') for x in gf.getMemberGenes())
+        members = set(gf.getMemberGenes())
         self.assertSetEqual(expectedMembers, members)
 
-    def membSubSetsAtLevel(self, fam, level):
+    def membSubSetsAtLevel(self, fam, level, parser):
         gf = fa.GeneFamily(fam)
-        levelAnalysis = gf.analyzeLevel(level)
+        levelAnalysis = gf.analyzeLevel(level, parser)
         return levelAnalysis.geneClasses()
 
-    def test_humanMemberSubSetsAtPrimates(self):
-        fam = self.getLastExampleFamily()
-        geneClasses = self.membSubSetsAtLevel(fam, 'Primates')
+#    def test_humanMemberSubSetsAtPrimates(self):
+#        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+#        fam = self.getLastExampleFamily(parser)
+#        geneClasses = self.membSubSetsAtLevel(fam, 'Primates', parser)
+#        self.assertFalse(True,"test not yet finished")
 
 
 class TaxonomyFactoryTest(unittest.TestCase):
-    
+
     def test_xmlTaxonomyNotImpl(self):
         self.assertRaises(NotImplementedError,
-                fa.TaxonomyFactory.newTaxonomy,
-                "test/taxEx.xml")
+                          fa.TaxonomyFactory.newTaxonomy,
+                          "test/taxEx.xml")
 
     def test_taxFromOrthoXMLParser(self):
         p = SetupHelper.createOrthoXMLParserFromSimpleEx()
