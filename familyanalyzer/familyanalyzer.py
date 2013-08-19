@@ -24,25 +24,20 @@ class ElementError(Exception):
 
 class OrthoXMLQuery(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
-    
+
     @classmethod
     def getToplevelOrthologGroups(cls, root):
         xquery = ".//{{{ns0}}}groups/{{{ns0}}}orthologGroup".format(**cls.ns)
         return root.findall(xquery)
 
     @classmethod
-    def getGeneFromId(cls,id_,root):
+    def getGeneFromId(cls, id_, root):
         xquery = ".*//{{{}}}gene[@id='{}']".format(cls.ns['ns0'], id_)
         return root.findall(xquery)
 
     @classmethod
-    def getXXX(cls,root):
-        xquery = ".//"
-        return root.findall(xquery)
-
-    @classmethod
     def getGroupsAtLevel(cls, level, root):
-        """returns a list with the orthologGroup elements which have a 
+        """returns a list with the orthologGroup elements which have a
         TaxRange property equals to the requested level."""
         xquery = (".//{{{0}}}property[@name='TaxRange'][@value='{1}']/..".
                   format(cls.ns['ns0'], level))
@@ -88,7 +83,7 @@ class OrthoXMLParser(object):
             res = self._xrefs.get(tup, None)
             if res is None:
                 # fallback, if not in dict
-                gene = OrthoXMLQuery.getGeneFromId(id_)
+                gene = OrthoXMLQuery.getGeneFromId(id_, self.root)
                 # return desired ID typ, otherwise whole element
                 if typ is not None:
                     res = gene.get(typ, gene)
