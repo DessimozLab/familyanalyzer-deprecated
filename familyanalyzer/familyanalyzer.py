@@ -11,6 +11,7 @@ except ImportError:
     import xml.etree.ElementTree as etree
 import collections
 import itertools
+import io
 
 
 class ElementError(Exception):
@@ -349,8 +350,7 @@ class Taxonomy(object):
             self.printSubTreeR(fd, child.name, indent+1)
 
     def __str__(self):
-        import io as sIO
-        fd = sIO.StringIO()
+        fd = io.StringIO()
         self.printSubTreeR(fd)
         res = fd.getvalue()
         fd.close()
