@@ -53,6 +53,10 @@ class OrthoXMLQuery(object):
         xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
         return root.findall(xquery)
 
+    @classmethod
+    def is_geneRef_node(cls, element):
+        return element.tag == '{{{ns0}}}geneRef'.format(**cls.ns)
+
 
 class OrthoXMLParser(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
@@ -317,7 +321,7 @@ class TaxonomyFactory(object):
 
 class Taxonomy(object):
     def __init__(self):
-        raise Exception("abstract class")
+        raise NotImplementedError("abstract class")
 
     def iterParents(self, node, stopBefor=None):
         if node == stopBefor:
@@ -360,7 +364,8 @@ class XMLTaxonomy(Taxonomy):
 
 class TaxRangeOrthoXMLTaxonomy(Taxonomy):
     def __init__(self, parser):
-        self.extractAdjacencies(parser)
+        self.parser = parser
+        self.extractAdjacencies()
         self.bloat_all()
         self.extractHierarchy()
 
@@ -373,9 +378,12 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         directChildNodes = list(grp)
         children = [child for child in directChildNodes
                     if OrthoXMLParser.is_evolutionary_node(child)]
+        geneRefs = [node for node in directChildNodes if OrthoXMLQuery.is_geneRef_node(node)]
+        speciesOfGenes = {self.parser.mapGeneToSpecies(x.get('id')) for x in geneRefs}
+
 
         # recursivly process childreen nodes
-        subLevs = set()
+        subLevs = speciesOfGenes
         for child in children:
             subLevs.update(self._parseParentChildRelsR(child))
 
@@ -386,9 +394,9 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
             subLevs = set(levels)
         return subLevs
 
-    def extractAdjacencies(self, parser):
+    def extractAdjacencies(self):
         self.adj = set()
-        for grp in parser.getToplevelGroups():
+        for grp in self.parser.getToplevelGroups():
             self._parseParentChildRelsR(grp)
 
         self.nodes = set(itertools.chain(*self.adj))

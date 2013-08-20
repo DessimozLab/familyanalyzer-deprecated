@@ -130,7 +130,8 @@ class TaxonomyFactoryTest(unittest.TestCase):
     def test_taxFromOrthoXMLParser(self):
         p = SetupHelper.createOrthoXMLParserFromSimpleEx()
         tax = fa.TaxonomyFactory.newTaxonomy(p)
-        self.assertSetEqual(set(tax.hierarchy.keys()), p.getLevels())
+        expectedLevels = p.getLevels().union(p.getSpeciesSet())
+        self.assertSetEqual(set(tax.hierarchy.keys()), expectedLevels)
 
 
 class SimpleTaxonomyTest(unittest.TestCase):
