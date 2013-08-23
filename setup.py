@@ -9,6 +9,6 @@ setup(
     author_email='adrian.altenhoff@inf.ethz.ch',
     description='todoc',
     packages=find_packages(),
-    install_requires=[],
+    install_requires=['lxml'],
 )
 

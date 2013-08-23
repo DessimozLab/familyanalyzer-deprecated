@@ -5,10 +5,7 @@
 #
 #                            Adrian Altenhoff, June 2013
 #
-try:
-    import xml.etree.cElementTree as etree
-except ImportError:
-    import xml.etree.ElementTree as etree
+import lxml.etree as etree
 import collections
 import itertools
 import io
@@ -57,7 +54,13 @@ class OrthoXMLQuery(object):
     def is_geneRef_node(cls, element):
         return element.tag == '{{{ns0}}}geneRef'.format(**cls.ns)
 
+    @classmethod
+    def getLevels(cls, element):
+        propTags = cls.getSubNodes("property", element, recursivly=False)
+        res = [t.get('value') for t in propTags if t.get('name')=='TaxRange']
+        return res
 
+ 
 class OrthoXMLParser(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
 
@@ -500,9 +503,7 @@ class GeneFamily(object):
         return self.root.get('og')
 
     def getLevels(self):
-        propTags = OrthoXMLQuery.getSubNodes("property", self.root, recursivly=False)
-        res = [t.get('value') for t in propTags if t.get('name')=='TaxRange']
-        return res
+        return OrthoXMLQuery.getLevels(self.root)
 
     def analyzeLevel(self, level):
         """analyze the structure of the family at a given taxonomic
@@ -721,14 +722,43 @@ class GroupAnnotator(object):
                                     .format(levels, levelsToParent))
             addLevels = levelsToParent - levels
             for lev in addLevels:
-                node.append(etree.Element('{{{ns0}}}property'.format(**self.ns),
-                                          name="TaxRange", value=lev))
+                node.append(self._createTaxRangeTag(lev))
             for child in list(node):
                 self._addTaxRangeR(child, mostSpecificLevel)
 
         elif self.parser.is_paralog_group(node):
             for child in list(node):
                 self._addTaxRangeR(child, last)
+        elif OrthoXMLQuery.is_geneRef_node(node):
+            # we check whether the parent node is a direct ancester in the 
+            # tax or not. if not, we creaete a fake orthologGroup.
+            spec = self.parser.mapGeneToSpecies(node.get('id'))
+            expRange = self.tax.hierarchy[spec].up.name
+            directParent = parent = node.getparent()
+            while not self.parser.is_ortholog_group(parent):
+                parent = parent.getparent()
+            levOfParent = OrthoXMLQuery.getLevels(parent)
+            mostSpecific = self.tax.mostSpecific(levOfParent)
+            if expRange != mostSpecific:
+                self._insertOG(directParent, node, expRange, mostSpecific) 
+            
+    def _insertOG(self, parent, child, specificLev, beforeLev):
+        pos = parent.index(child)
+        el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
+        el.append(self._createTaxRangeTag(specificLev))
+        for lev in self.tax.iterParents(specificLev, stopBefor=beforeLev):
+            el.append(self._createTaxRangeTag(lev))
+        el.append(child)
+        parent.insert(pos, el) 
+
+    def _createTaxRangeTag(self, lev):
+        return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
+                attrib=dict(name='TaxRange', value=lev))
+
+
+             
+
+
 
     def annotateMissingTaxRanges(self, tax, propagate_top=False):
         """This function adds left-out taxrange property elements to
