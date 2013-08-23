@@ -673,6 +673,21 @@ class FamHistory(object):
         fd.close()
         return res
 
+    def compare(self, other, fd):
+        famIds = [gfam.getFamId() for gfam in self.geneFamList]
+        otherfamIds = [gfam.getFamId() for gfam in other.geneFamList]
+        for f in famIds:
+            if f == "n/a":
+                continue
+            if f in otherfamIds:
+                fd.write("{} identical\n".format(f))
+            else:
+                subfam = [s for s in otherfamIds if s.startswith(f)]
+                fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
+        for f in otherfamIds:
+            topId = f[:f.find('.')]
+            if not any(map(lambda x:x.startswith(topId), famIds)):
+                fd.write("n/a -> {}\n".format(f))
 
 class GroupAnnotator(object):
     def __init__(self, parser):
@@ -788,6 +803,7 @@ if __name__ == "__main__":
     parser.add_argument('--propagate_top', action='store_true', help='propagate taxonomy levels up to the toplevel. If not set, only intermediate levels are propagated.')
     parser.add_argument('--show_taxonomy', action='store_true', help='show taxonomy used to infer missing levels')
     parser.add_argument('--store_augmented_xml', default=None, help='if set to a filename, the input orthoxml file with augmented annotations is written')
+    parser.add_argument('--compare_second_level',default=None, help='compare secondary level with primary one')
     parser.add_argument('path', help='path to orthoxml file')
     parser.add_argument('level', help='taxonomic level at which analysis should be done')
     parser.add_argument('species', nargs="+", help='(list of) species to be analyzed')
@@ -821,8 +837,13 @@ if __name__ == "__main__":
     else:
         hist = op.getFamHistory()
         hist.analyzeLevel(args.level)
-    hist.setXRefTag(args.xreftag)
-    hist.write(sys.stdout, speciesFilter=args.species)
+    if args.compare_second_level is None:
+        hist.setXRefTag(args.xreftag)
+        hist.write(sys.stdout, speciesFilter=args.species)
+    else:
+        hist2 = op.getFamHistory()
+        hist2.analyzeLevel(args.compare_second_level)
+        hist.compare(hist2, sys.stdout)
 
     if args.store_augmented_xml is not None:
         op.write(args.store_augmented_xml)
