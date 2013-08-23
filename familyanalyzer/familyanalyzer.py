@@ -331,16 +331,31 @@ class Taxonomy(object):
             tn = tn.up
             yield tn.name
 
+    def _countParentAmongLevelSet(self, levels):
+        levelSet = set(levels)
+        cnts = dict()
+        for lev in levelSet:
+            t = set(self.iterParents(lev)).intersection(levelSet)
+            cnts[lev] = len(t)
+        return cnts
+
     def mostSpecific(self, levels):
-        levels = set(levels)
         # count who often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
-        cnts = [len(set(self.iterParents(x)).intersection(levels)) for x in levels]
-        levels = list(levels)
-        try:
-            return levels[cnts.index(len(levels)-1)]
-        except:
-            raise Exception("Non of the element is subelement of all others")
+        cnts = self._countParentAmongLevelSet(levels)
+        for lev, cnt in cnts.items():
+            if cnt==len(levels)-1:
+                return lev
+        raise Exception("Non of the element is subelement of all others")
+
+    def mostGeneralLevel(self, levels):
+        # count who often each element is a child of any other one.
+        # the one with len(levels)-1 is the most specific level
+        cnts = self._countParentAmongLevelSet(levels)
+        for lev, cnt in cnts.items():
+            if cnt==0:
+                return lev
+        raise Exception("Non of the element is the root of all others")
 
     def printSubTreeR(self, fd, lev=None, indent=0):
         if lev is None:
