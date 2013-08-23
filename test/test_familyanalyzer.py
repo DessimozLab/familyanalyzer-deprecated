@@ -87,6 +87,18 @@ class TaxNodeTest(unittest.TestCase):
                           self.child.addParent,
                           extraNode)
 
+    def test_iterLeaves(self):
+        root = fa.TaxNode('root')
+        left = fa.TaxNode('left')
+        right = fa.TaxNode('right')
+        leftleft = fa.TaxNode('left-left')
+        leftright = fa.TaxNode('left-right')
+        left.addChild(leftleft)
+        left.addChild(leftright)
+        root.addChild(left)
+        root.addChild(right)
+        leaves = list(root.iterLeaves())
+        self.assertEqual(leaves, [leftleft, leftright, right])
 
 class GeneFamilyTest(unittest.TestCase):
 

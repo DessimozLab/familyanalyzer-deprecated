@@ -473,6 +473,14 @@ class TaxNode(object):
                 .format(self.name, self.up.name, p.name))
         self.up = p
 
+    def iterLeaves(self):
+        if len(self.down) == 0:
+            yield self
+        else:
+            for child in self.down:
+                for elem in child.iterLeaves():
+                    yield elem
+
 
 class GeneFamily(object):
     """GeneFamily(root_element)
@@ -490,6 +498,11 @@ class GeneFamily(object):
 
     def getFamId(self):
         return self.root.get('og')
+
+    def getLevels(self):
+        propTags = OrthoXMLQuery.getSubNodes("property", self.root, recursivly=False)
+        res = [t.get('value') for t in propTags if t.get('name')=='TaxRange']
+        return res
 
     def analyzeLevel(self, level):
         """analyze the structure of the family at a given taxonomic
@@ -531,6 +544,10 @@ class Singletons(GeneFamily):
 
     def getFamId(self):
         return "n/a"
+
+    def getLevels(self):
+        return None
+
 
     def analyzeLevel(self, level, parser):
         return self
@@ -594,7 +611,15 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         self.tax = tax
 
     def analyzeGeneFam(self, fam):
-        return super().analyzeGeneFam(fam)
+        summary = super().analyzeGeneFam(fam)
+        lev = fam.getLevels()
+        if lev is not None:
+            mostGeneralLevel = self.tax.mostGeneralLevel(lev)
+            speciesCoveredByLevel = {l for l in self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
+            lostSpecies = speciesCoveredByLevel.difference(summary.keys())
+            for lost in lostSpecies:
+                summary[lost] = [(SummaryOfSpecies("ANCIENT_BUT_LOST",[]))]
+        return summary
 
 
 class FamHistory(object):
@@ -689,7 +714,7 @@ class GroupAnnotator(object):
             if noUpwardLevels:
                 levelsToParent = set()
             else:
-                levelsToParent = {self.tax.iterParents(mostSpecificLevel, last)}
+                levelsToParent = {l for l in self.tax.iterParents(mostSpecificLevel, last)}
                 levelsToParent.add(mostSpecificLevel)
                 if not levels.issubset(levelsToParent):
                     raise Exception("taxonomy not in correspondance with found hierarchy: {} vs {}"
