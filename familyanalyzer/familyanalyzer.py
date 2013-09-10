@@ -10,7 +10,6 @@ import collections
 import itertools
 import io
 
-
 class ElementError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -41,12 +40,12 @@ class OrthoXMLQuery(object):
         return root.findall(xquery)
 
     @classmethod
-    def getSubNodes(cls, targetNode, root, recursivly=True):
+    def getSubNodes(cls, targetNode, root, recursively=True):
         """method which returns a list of all (if recursively
         is set to true) or only the direct children nodes
         having 'targetNode' as their tagname. The namespace is
         added to the tagname."""
-        xPrefix = ".//" if recursivly else "./"
+        xPrefix = ".//" if recursively else "./"
         xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
         return root.findall(xquery)
 
@@ -56,7 +55,7 @@ class OrthoXMLQuery(object):
 
     @classmethod
     def getLevels(cls, element):
-        propTags = cls.getSubNodes("property", element, recursivly=False)
+        propTags = cls.getSubNodes("property", element, recursively=False)
         res = [t.get('value') for t in propTags if t.get('name')=='TaxRange']
         return res
 
@@ -404,7 +403,7 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         speciesOfGenes = {self.parser.mapGeneToSpecies(x.get('id')) for x in geneRefs}
 
 
-        # recursivly process childreen nodes
+        # recursively process childreen nodes
         subLevs = speciesOfGenes
         for child in children:
             subLevs.update(self._parseParentChildRelsR(child))
@@ -677,6 +676,21 @@ class FamHistory(object):
         fd.close()
         return res
 
+    def _find_subfamilies(self, query, targetlist):
+        """ Used in compare method - fixes s.startswith bug where
+        queries such as '20' would return subfamilies '200', '2000', etc. 
+        Now '20' will only return subfamilies of the form '20.1a', 20.1b.2c.3e', 
+        etc. """
+        result = []
+        q = query.split('.') # e.g. 8.1b.2a -> ['8', '1b', '2a']
+
+        for family in targetlist:
+            name_elements = family.split('.')
+            if name_elements[:len(q)] == q: # exact prefix match to query
+                result.append(family)
+
+        return result
+
     def compare(self, other, fd):
         famIds = [gfam.getFamId() for gfam in self.geneFamList]
         otherfamIds = [gfam.getFamId() for gfam in other.geneFamList]
@@ -686,8 +700,11 @@ class FamHistory(object):
             if f in otherfamIds:
                 fd.write("{} identical\n".format(f))
             else:
-                subfam = [s for s in otherfamIds if s.startswith(f)]
-                fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
+                subfam = self._find_subfamilies(f, otherfamIds)
+                if len(subfam) == 0:
+                    fd.write("{} -> LOST\n".format(f))
+                else:
+                    fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
         for f in otherfamIds:
             topId = f[:f.find('.')]
             if not any(map(lambda x:x.startswith(topId), famIds)):
@@ -847,6 +864,8 @@ if __name__ == "__main__":
     else:
         hist2 = op.getFamHistory()
         hist2.analyzeLevel(args.compare_second_level)
+        print("Comparing taxlevel {}\n to taxlevel {}".format(
+            args.level, args.compare_second_level))
         hist.compare(hist2, sys.stdout)
 
     if args.store_augmented_xml is not None:

@@ -3,7 +3,6 @@
 import io, collections, os
 from familyanalyzer import TaxNode, Taxonomy, enum
 
-
 class Streamer(object):
 
     """ Wraps an io.StringIO and iterates a byte at a time,
@@ -46,8 +45,8 @@ class NewickLexer(object):
     """ Breaks newick stream into lexing tokens:
     Works as a state machine, like Rob Pike's Go text template parser """
 
-    tokens = enum("EOF", "TREE", "LEAF", "SUBTREE", "LABEL", "LENGTH", 
-        "SUPPORT", "ENDSUB", "ENDTREE")
+    tokens = enum("EOF", "TREE", "LEAF", "SUBTREE", "LABEL", 
+        "LENGTH", "SUPPORT", "ENDSUB", "ENDTREE")
 
     def __init__(self, streamer):        
         self.streamer = streamer
@@ -124,6 +123,7 @@ class NewickLexer(object):
             return self.lex_label
 
     def lex_label(self):
+        self.eat_spaces()
         char = self.streamer.peek()
         if char in ('"', "'"):
             next(self.streamer) # throw away opening quote 
