@@ -619,7 +619,7 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         lev = fam.getLevels()
         if lev is not None:
             mostGeneralLevel = self.tax.mostGeneralLevel(lev)
-            speciesCoveredByLevel = {l for l in self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
+            speciesCoveredByLevel = {l.name for l in self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
             lostSpecies = speciesCoveredByLevel.difference(summary.keys())
             for lost in lostSpecies:
                 summary[lost] = [(SummaryOfSpecies("ANCIENT_BUT_LOST",[]))]
