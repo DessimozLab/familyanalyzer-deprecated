@@ -20,10 +20,14 @@ class ElementError(Exception):
 
 
 class OrthoXMLQuery(object):
+    """Helper class with predefined queries on an orthoxml tree."""
+
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
 
     @classmethod
     def getToplevelOrthologGroups(cls, root):
+        """returns a list with the toplevel orthologGroup elements
+        of the given root element."""
         xquery = ".//{{{ns0}}}groups/{{{ns0}}}orthologGroup".format(**cls.ns)
         return root.findall(xquery)
 
@@ -44,23 +48,29 @@ class OrthoXMLQuery(object):
     def getSubNodes(cls, targetNode, root, recursivly=True):
         """method which returns a list of all (if recursively
         is set to true) or only the direct children nodes
-        having 'targetNode' as their tagname. The namespace is
-        added to the tagname."""
+        having 'targetNode' as their tagname.
+        The namespace is automatically added to the tagname."""
         xPrefix = ".//" if recursivly else "./"
         xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
         return root.findall(xquery)
 
     @classmethod
     def is_geneRef_node(cls, element):
+        """check whether a given element is an instance of a geneRef
+        element."""
         return element.tag == '{{{ns0}}}geneRef'.format(**cls.ns)
 
     @classmethod
     def getLevels(cls, element):
+        """returns a list of the TaxRange levels associated to the
+        passed orthologGroup element. If the element does not have
+        any TaxRange property tags associated, an empty list is
+        returned."""
         propTags = cls.getSubNodes("property", element, recursivly=False)
         res = [t.get('value') for t in propTags if t.get('name')=='TaxRange']
         return res
 
- 
+
 class OrthoXMLParser(object):
     ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
 
@@ -273,6 +283,11 @@ class OrthoXMLParser(object):
         return genes
 
     def getFamHistory(self):
+        """This method returns a FamHistory object initialized with
+        the most powerful LevelAnalysis handler. The handler depends
+        on whether the parser contains a tax attribute, set by the
+        augmentTaxonomyInfo method if called."""
+
         # assure that orthologGroup xml elements annotated with an 'og' attr
         if self.root.find(".//*[@og]") is None:
             GroupAnnotator(self).annotateDoc()
@@ -327,6 +342,9 @@ class Taxonomy(object):
         raise NotImplementedError("abstract class")
 
     def iterParents(self, node, stopBefor=None):
+        """iterates over all the taxonomy nodes towards the root
+        which are above 'node' and below 'stopBefor'."""
+
         if node == stopBefor:
             return
         tn = self.hierarchy[node]
@@ -335,6 +353,11 @@ class Taxonomy(object):
             yield tn.name
 
     def _countParentAmongLevelSet(self, levels):
+        """helper method to count for each level how many levels
+        are parent levels. e.g. (arrow: is-partent-of)
+          A->B->C
+              \>D->E
+        will return A=0,B=1,C=2,D=2,E=3"""
         levelSet = set(levels)
         cnts = dict()
         for lev in levelSet:
@@ -343,6 +366,9 @@ class Taxonomy(object):
         return cnts
 
     def mostSpecific(self, levels):
+        """returns the most specific (youngest) level among a set of
+        levels. it is required that all levels are on one monophyletic
+        lineage, otherwise an Exception is raised."""
         # count who often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
         cnts = self._countParentAmongLevelSet(levels)
@@ -352,6 +378,7 @@ class Taxonomy(object):
         raise Exception("Non of the element is subelement of all others")
 
     def mostGeneralLevel(self, levels):
+        """returns the most general (odest) level among a set of levels."""
         # count who often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
         cnts = self._countParentAmongLevelSet(levels)
@@ -515,6 +542,10 @@ class GeneFamily(object):
         return subFams
 
     def analyze(self, strategy):
+        """analyze the history of the GeneFamily using the strategy
+        passed to the method. The strategy arguement must be an
+        object providing a analyzeGeneFam method,
+        e.g. a LevelAnalysis object."""
         self.summary = strategy.analyzeGeneFam(self)
 
     def write(self, fd, speciesFilter=None, idFormatter=lambda x: x):
@@ -593,6 +624,11 @@ class BasicLevelAnalysis(object):
         self.parser = parser
 
     def analyzeGeneFam(self, fam):
+        """analyzes a single gene family and returns a summary dict.
+
+        This method classifies all genes in the family depending on
+        the number of copies per genome into MULTICOPY or SINGLECOPY
+        genes."""
         spec2genes = collections.defaultdict(set)
         for geneId in fam.getMemberGenes():
             spec = self.parser.mapGeneToSpecies(geneId)
@@ -612,9 +648,18 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         self.tax = tax
 
     def analyzeGeneFam(self, fam):
+        """analyzes a singel gene family in the context of a known
+        taxonomic tree.
+
+        in addition to the method defined in the base class, this
+        method adds information of lost genes. It does this by
+        checking whether a species within the taxonomic range of
+        the family contains a copy of the gene. if not, it had
+        been lost."""
         summary = super().analyzeGeneFam(fam)
         lev = fam.getLevels()
         if lev is not None:
+            # if several levels exist at this node, use oldest one
             mostGeneralLevel = self.tax.mostGeneralLevel(lev)
             speciesCoveredByLevel = {l for l in self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
             lostSpecies = speciesCoveredByLevel.difference(summary.keys())
@@ -631,6 +676,9 @@ class FamHistory(object):
         self.analyzer = analyzer
 
     def setXRefTag(self, tag):
+        """set the attribute name of the 'gene' elements which should
+        be used for report. defined by orthoxml are 'geneId' and
+        'protId'. If not defined, the (numerical) internal ids are used."""
         self.XRefTag = tag
 
     def analyzeLevel(self, level):
@@ -661,6 +709,13 @@ class FamHistory(object):
         self.analyzedLevel = level
 
     def write(self, fd, speciesFilter=None):
+        """writes the FamHistory object to a given stream object
+        in a human readable format.
+        The stream object needs to have a write(str) method defined.
+        The optional speciesFilter argument accepts a set of
+        species names for which the genes in the families are
+        reported."""
+
         fd.write("FamilyAnalysis at {}\n".format(self.analyzedLevel))
         for fam in self.geneFamList:
             fam.write(fd, speciesFilter, idFormatter=lambda gid:
@@ -674,6 +729,21 @@ class FamHistory(object):
         return res
 
     def compare(self, other, fd):
+        """compares two FamilyHistory objects.
+
+        The two FamilyHistory objects are ment to operate on the same
+        dataset, but on different taxonomic levels. It compares all
+        families with respect to these two levels and clusters them
+        according to whether they are
+         - identical (no duplication/loss on the lineage between the
+           two levels
+         - duplications (old family duplicated along the lineage into
+           two or more subfamilies)
+         - novel families (did not exist at older level)
+
+        It is expected that the 'other' family object corresponds to
+        the younger taxonomic level, but this is not enforced. """
+
         famIds = [gfam.getFamId() for gfam in self.geneFamList]
         otherfamIds = [gfam.getFamId() for gfam in other.geneFamList]
         for f in famIds:
@@ -690,17 +760,30 @@ class FamHistory(object):
                 fd.write("n/a -> {}\n".format(f))
 
 class GroupAnnotator(object):
+    """this class annotates orthologGroup elements with the numbering
+    schema presented in the LOFT paper:
+    van der Heijden, Snel, van Noort, Huynen
+    Orthology prediction at scalable resolution by phylogenetic tree analysis.
+    BMC Bioinformatics, 2007, 8, 83
+
+    and adding additional property tags with skipped TaxRange levels."""
+
     def __init__(self, parser):
         self.parser = parser
         self.ns = parser.ns
 
     def _getNextSubId(self, idx):
+        """helper method to return the next number at a given depth of
+        duplication (idx)"""
         while len(self.dupCnt) < idx:
             self.dupCnt.append(0)
         self.dupCnt[idx-1] += 1
         return self.dupCnt[idx - 1]
 
     def _encodeParalogClusterId(self, prefix, nr):
+        """encode the paralogGroups at the same level, e.g. 1a, 1b, 1c
+        for 3 paralogGroups next to each other. the nr argument
+        identifies the individual indices of those 3 paralogGroups."""
         letters = []
         while nr//26 > 0:
             letters.append(chr(97 + (nr % 26)))
@@ -709,6 +792,11 @@ class GroupAnnotator(object):
         return prefix+''.join(letters[::-1])  # letters were in reverse order
 
     def _annotateGroupR(self, node, og, idx=0):
+        """create the og attributes at the orthologGroup elements
+        according to the naming schema of LOFT. ParalogGroup elements
+        do not get own attributes (not possible in the xml schema),
+        but propagate their sub-names for the subsequent orthologGroup
+        elements."""
         if self.parser.is_ortholog_group(node):
             node.set('og', og)
             for child in list(node):
@@ -722,6 +810,7 @@ class GroupAnnotator(object):
                                      idx)
 
     def _addTaxRangeR(self, node, last=None, noUpwardLevels=False):
+        """recursive method to ad TaxRange property tags."""
         if self.parser.is_ortholog_group(node):
             levels = {z.get('value') for z in node.findall(
                 './{{{ns0}}}property[@name="TaxRange"]'
@@ -745,7 +834,7 @@ class GroupAnnotator(object):
             for child in list(node):
                 self._addTaxRangeR(child, last)
         elif OrthoXMLQuery.is_geneRef_node(node):
-            # we check whether the parent node is a direct ancester in the 
+            # we check whether the parent node is a direct ancester in the
             # tax or not. if not, we creaete a fake orthologGroup.
             spec = self.parser.mapGeneToSpecies(node.get('id'))
             expRange = self.tax.hierarchy[spec].up.name
@@ -755,8 +844,8 @@ class GroupAnnotator(object):
             levOfParent = OrthoXMLQuery.getLevels(parent)
             mostSpecific = self.tax.mostSpecific(levOfParent)
             if expRange != mostSpecific:
-                self._insertOG(directParent, node, expRange, mostSpecific) 
-            
+                self._insertOG(directParent, node, expRange, mostSpecific)
+
     def _insertOG(self, parent, child, specificLev, beforeLev):
         pos = parent.index(child)
         el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
@@ -764,16 +853,11 @@ class GroupAnnotator(object):
         for lev in self.tax.iterParents(specificLev, stopBefor=beforeLev):
             el.append(self._createTaxRangeTag(lev))
         el.append(child)
-        parent.insert(pos, el) 
+        parent.insert(pos, el)
 
     def _createTaxRangeTag(self, lev):
         return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
                 attrib=dict(name='TaxRange', value=lev))
-
-
-             
-
-
 
     def annotateMissingTaxRanges(self, tax, propagate_top=False):
         """This function adds left-out taxrange property elements to
@@ -787,6 +871,7 @@ class GroupAnnotator(object):
         del self.tax
 
     def annotateDoc(self):
+        """apply the LOFT naming schema to all the orthologGroups."""
         for i, fam in enumerate(self.parser.getToplevelGroups()):
             self.dupCnt = list()
             self._annotateGroupR(fam, fam.get('id', str(i)))
