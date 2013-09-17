@@ -750,7 +750,7 @@ class FamHistory(object):
     def compare(self, other, fd):
         """compares two FamilyHistory objects.
 
-        The two FamilyHistory objects are ment to operate on the same
+        The two FamilyHistory objects are meant to operate on the same
         dataset, but on different taxonomic levels. It compares all
         families with respect to these two levels and clusters them
         according to whether they are
@@ -777,7 +777,7 @@ class FamHistory(object):
                 else:
                     fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
         for f in otherfamIds:
-            topId = f[:f.find('.')]
+            topId = f[:f.find('.')+1]
             if not any(map(lambda x:x.startswith(topId), famIds)):
                 fd.write("n/a -> {}\n".format(f))
 
