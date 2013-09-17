@@ -10,7 +10,6 @@ import collections
 import itertools
 import io
 
-
 class ElementError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -331,6 +330,10 @@ class TaxonomyFactory(object):
         if isinstance(arg, str):
             if arg.endswith('.xml'):
                 return XMLTaxonomy(arg)
+            else:
+                suffix = arg[arg.rindex('.'):]
+                if suffix in ['.nwk', '.tree', '.newick']:
+                    return NewickTaxonomy(arg) 
         elif isinstance(arg, OrthoXMLParser):
             return TaxRangeOrthoXMLTaxonomy(arg)
         else:
@@ -404,7 +407,7 @@ class Taxonomy(object):
 
 class XMLTaxonomy(Taxonomy):
     def __init__(self, filename):
-        raise NotImplementedError("XML Taxonomys have not yet been implemented")
+        raise NotImplementedError("XML Taxonomies have not yet been implemented")
 
 
 class TaxRangeOrthoXMLTaxonomy(Taxonomy):
@@ -427,7 +430,7 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         speciesOfGenes = {self.parser.mapGeneToSpecies(x.get('id')) for x in geneRefs}
 
 
-        # recursivly process childreen nodes
+        # recursively process childreen nodes
         subLevs = speciesOfGenes
         for child in children:
             subLevs.update(self._parseParentChildRelsR(child))
@@ -629,6 +632,7 @@ class BasicLevelAnalysis(object):
         This method classifies all genes in the family depending on
         the number of copies per genome into MULTICOPY or SINGLECOPY
         genes."""
+
         spec2genes = collections.defaultdict(set)
         for geneId in fam.getMemberGenes():
             spec = self.parser.mapGeneToSpecies(geneId)
@@ -728,6 +732,21 @@ class FamHistory(object):
         fd.close()
         return res
 
+    def _find_subfamilies(self, query, targetlist):
+        """ Used in compare method - fixes s.startswith bug where
+        queries such as '20' would return subfamilies '200', '2000', etc. 
+        Now '20' will only return subfamilies of the form '20.1a', 20.1b.2c.3e', 
+        etc. """
+        result = []
+        q = query.split('.') # e.g. 8.1b.2a -> ['8', '1b', '2a']
+
+        for family in targetlist:
+            name_elements = family.split('.')
+            if name_elements[:len(q)] == q: # exact prefix match to query
+                result.append(family)
+
+        return result
+
     def compare(self, other, fd):
         """compares two FamilyHistory objects.
 
@@ -752,12 +771,16 @@ class FamHistory(object):
             if f in otherfamIds:
                 fd.write("{} identical\n".format(f))
             else:
-                subfam = [s for s in otherfamIds if s.startswith(f)]
-                fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
+                subfam = self._find_subfamilies(f, otherfamIds)
+                if len(subfam) == 0:
+                    fd.write("{} -> LOST\n".format(f))
+                else:
+                    fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
         for f in otherfamIds:
             topId = f[:f.find('.')]
             if not any(map(lambda x:x.startswith(topId), famIds)):
                 fd.write("n/a -> {}\n".format(f))
+
 
 class GroupAnnotator(object):
     """this class annotates orthologGroup elements with the numbering
@@ -876,6 +899,7 @@ class GroupAnnotator(object):
             self.dupCnt = list()
             self._annotateGroupR(fam, fam.get('id', str(i)))
 
+
 if __name__ == "__main__":
     import argparse
     import sys
@@ -908,7 +932,10 @@ if __name__ == "__main__":
     if args.taxonomy == "implicit":
         tax = TaxonomyFactory.newTaxonomy(op)
     else:
+        from newick import NewickTaxonomy
         tax = TaxonomyFactory.newTaxonomy(args.taxonomy)
+        if isinstance(tax, NewickTaxonomy):
+            tax.annotate_from_orthoxml(op)
 
     if args.show_taxonomy:
         print("Use following taxonomy")
@@ -928,6 +955,8 @@ if __name__ == "__main__":
     else:
         hist2 = op.getFamHistory()
         hist2.analyzeLevel(args.compare_second_level)
+        print("Comparing taxlevel {}\n to taxlevel {}".format(
+            args.level, args.compare_second_level))
         hist.compare(hist2, sys.stdout)
 
     if args.store_augmented_xml is not None:
