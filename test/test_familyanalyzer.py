@@ -120,16 +120,21 @@ class GeneFamilyTest(unittest.TestCase):
         members = set(gf.getMemberGenes())
         self.assertSetEqual(expectedMembers, members)
 
-    def membSubSetsAtLevel(self, fam, level, parser):
+    def famMemberGenesAtLevel(self, fam, level):
         gf = fa.GeneFamily(fam)
-        levelAnalysis = gf.analyzeLevel(level, parser)
-        return levelAnalysis.geneClasses()
+        levelAnalysis = gf.analyzeLevel(level)
+        genes = set()
+        for subfam in levelAnalysis:
+            genes.update(subfam.getMemberGenes())
+        return genes
 
-#    def test_humanMemberSubSetsAtPrimates(self):
-#        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
-#        fam = self.getLastExampleFamily(parser)
-#        geneClasses = self.membSubSetsAtLevel(fam, 'Primates', parser)
-#        self.assertFalse(True,"test not yet finished")
+    def test_famMemberAtSubLevel(self):
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        fam = self.getLastExampleFamily(parser)
+        cases = {'Primates':{'3','13'}, 'Euarchontoglires':{'3','13','14','33','34'}}
+        for lev, expMemb in cases.items():
+            genes = self.famMemberGenesAtLevel(fam, lev)
+            self.assertSetEqual(genes, expMemb)
 
 
 class TaxonomyFactoryTest(unittest.TestCase):
