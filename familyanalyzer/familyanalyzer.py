@@ -539,7 +539,7 @@ class GeneFamily(object):
     def analyzeLevel(self, level):
         """analyze the structure of the family at a given taxonomic
         level.
-        returns a list of LevelAnalysis object, one per sub-family"""
+        returns a list of GeneFamily object, one per sub-family"""
 
         subFamNodes = OrthoXMLQuery.getGroupsAtLevel(level, self.root)
         subFams = [GeneFamily(fam) for fam in subFamNodes]
@@ -559,11 +559,11 @@ class GeneFamily(object):
         for spec in self.summary.keys():
             if not spec in species:
                 continue
-            for sumElem in self.summary[spec]:
-                refs = "; ".join([idFormatter(gid) for gid in sumElem.genes])
-                fd.write("{}\t{}\t{}\t{}:{}\n".format(
-                    self.getFamId(), spec, len(sumElem.genes),
-                    sumElem.typ, refs))
+            sumElem = self.summary[spec]
+            refs = "; ".join([idFormatter(gid) for gid in sumElem.genes])
+            fd.write("{}\t{}\t{}\t{}:{}\n".format(
+                self.getFamId(), spec, len(sumElem.genes),
+                sumElem.typ, refs))
 
 
 class Singletons(GeneFamily):
@@ -590,9 +590,8 @@ class Singletons(GeneFamily):
 
     def analyze(self, strategy):
         super().analyze(strategy)
-        for specSum in self.summary.values():
-            for sumElement in specSum:
-                sumElement.typ = "SINGLETON"
+        for sumElement in self.summary.values():
+            sumElement.typ = "SINGLETON"
 
 
 def enum(*sequential, **named):
@@ -642,8 +641,8 @@ class BasicLevelAnalysis(object):
         for spec in iter(spec2genes.keys()):
             nrMemb = len(spec2genes[spec])
             gclass = self.GeneClasses.MULTICOPY if nrMemb > 1 else self.GeneClasses.SINGLECOPY
-            summary[spec] = [SummaryOfSpecies(self.GeneClasses.reverse[gclass],
-                                              spec2genes[spec])]
+            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
+                                              spec2genes[spec])
         return summary
 
 
@@ -669,7 +668,7 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
             speciesCoveredByLevel = {l.name for l in self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
             lostSpecies = speciesCoveredByLevel.difference(summary.keys())
             for lost in lostSpecies:
-                summary[lost] = [(SummaryOfSpecies("ANCIENT_BUT_LOST",[]))]
+                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST",[])
         return summary
 
 
