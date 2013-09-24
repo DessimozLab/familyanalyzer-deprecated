@@ -748,7 +748,7 @@ class FamHistory(object):
 
         return result
 
-    def compare(self, other, fd):
+    def compare(self, other):
         """compares two FamilyHistory objects.
 
         The two FamilyHistory objects are meant to operate on the same
@@ -766,22 +766,68 @@ class FamHistory(object):
 
         famIds = [gfam.getFamId() for gfam in self.geneFamList]
         otherfamIds = [gfam.getFamId() for gfam in other.geneFamList]
+        comp = LevelComparisonResult(self.analyzedLevel, other.analyzedLevel)
         for f in famIds:
             if f == "n/a":
                 continue
             if f in otherfamIds:
-                fd.write("{} identical\n".format(f))
+                comp.addFamily(FamIdent(f))
             else:
                 subfam = self._find_subfamilies(f, otherfamIds)
                 if len(subfam) == 0:
-                    fd.write("{} -> LOST\n".format(f))
+                    comp.addFamily(FamLost(f))
                 else:
-                    fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
+                    comp.addFamily(FamDupl(f, "; ".join(subfam)))
         for f in otherfamIds:
             topId = f.split('.')[0]
             pattern = re.compile(r"{}(.|$)".format(topId))
             if not any(map(lambda x:pattern.match(x) is not None, famIds)):
-                fd.write("n/a -> {}\n".format(f))
+                comp.addFamily(FamNovel(f))
+        return comp
+
+
+class FamEvent(object):
+    event = None
+    def __init__(self, fam):
+        self.fam=fam
+    def __str__(self):
+        return "{}: {}\n".format(self.fam, self.event)
+
+class FamIdent(FamEvent):
+    event = "identical"
+
+class FamNovel(FamEvent):
+    event = "novel"
+
+class FamLost(FamEvent):
+    event = "lost"
+
+class FamDupl(FamEvent):
+    event = "duplicated"
+    def __init__(self, fam, subfam):
+        super().__init__(fam)
+        if isinstance(subfam, list):
+            subfam = "; ".join(subfam)
+        self.into = subfam
+    def __str__(self):
+        return "{} --> {}\n".format(self.fam, self.into)
+
+class LevelComparisonResult(object):
+    def __init__(self, lev1, lev2):
+        self.fams = list()
+        self.lev1 = lev1
+        self.lev2 = lev2
+
+    def addFamily(self, famEvent):
+        self.fams.append(famEvent)
+    
+    def write(self, fd):
+        fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
+                format(self.lev1, self.lev2))
+        self.fams.sort(key=lambda x:x.fam)
+        for fam in self.fams:
+            fd.writelines(str(fam))
+
 
 
 class GroupAnnotator(object):
@@ -959,7 +1005,8 @@ if __name__ == "__main__":
         hist2.analyzeLevel(args.compare_second_level)
         print("Comparing taxlevel {}\n to taxlevel {}".format(
             args.level, args.compare_second_level))
-        hist.compare(hist2, sys.stdout)
+        comp = hist.compare(hist2)
+        comp.write(sys.stdout)
 
     if args.store_augmented_xml is not None:
         op.write(args.store_augmented_xml)
