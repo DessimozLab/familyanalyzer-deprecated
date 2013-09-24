@@ -136,6 +136,20 @@ class GeneFamilyTest(unittest.TestCase):
             genes = self.famMemberGenesAtLevel(fam, lev)
             self.assertSetEqual(genes, expMemb)
 
+    def test_simpleAnalyzeStrategy(self):
+        """test the classification of genes for a few testcases"""
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        fam = fa.GeneFamily(self.getLastExampleFamily(parser))
+        analyzer = fa.BasicLevelAnalysis(parser)
+        summary = analyzer.analyzeGeneFam(fam)
+        hum = summary['HUMAN']
+        self.assertEqual(hum.typ,"SINGLECOPY")
+        self.assertSetEqual(hum.genes, {'3'})
+        ptr = summary['PANTR']
+        self.assertEqual(ptr.typ,"MULTICOPY")
+        self.assertSetEqual(ptr.genes, {'13','14'})
+
+        
 
 class TaxonomyFactoryTest(unittest.TestCase):
 
