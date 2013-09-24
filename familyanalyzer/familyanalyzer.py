@@ -9,6 +9,7 @@ import lxml.etree as etree
 import collections
 import itertools
 import io
+import re
 
 class ElementError(Exception):
     def __init__(self, msg):
@@ -777,8 +778,9 @@ class FamHistory(object):
                 else:
                     fd.write("{} -> {}\n".format(f, "; ".join(subfam)))
         for f in otherfamIds:
-            topId = f[:f.find('.')+1]
-            if not any(map(lambda x:x.startswith(topId), famIds)):
+            topId = f[:f.find('.')]
+            pattern = re.compile(r"{}(.|$)".format(topId))
+            if not any(map(lambda x:pattern.match(x) is not None, famIds)):
                 fd.write("n/a -> {}\n".format(f))
 
 
