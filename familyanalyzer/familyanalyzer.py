@@ -305,7 +305,7 @@ class OrthoXMLParser(object):
             famHist.addFamily(fam)
         return famHist
 
-    def augmentTaxonomyInfo(self, tax, propagate_top):
+    def augmentTaxonomyInfo(self, tax, propagate_top=False):
         """Assign a taxonomy to the orthoxml file. this taxonomy
         is used to augment the xml with the relevant level infos
         as 'TaxRange' property tags in orthologGroup elements.
