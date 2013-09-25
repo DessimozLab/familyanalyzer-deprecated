@@ -305,7 +305,7 @@ class OrthoXMLParser(object):
             famHist.addFamily(fam)
         return famHist
 
-    def augmentTaxonomyInfo(self, tax, propagate_top):
+    def augmentTaxonomyInfo(self, tax, propagate_top=False):
         """Assign a taxonomy to the orthoxml file. this taxonomy
         is used to augment the xml with the relevant level infos
         as 'TaxRange' property tags in orthologGroup elements.
@@ -791,6 +791,8 @@ class FamEvent(object):
         self.fam=fam
     def __str__(self):
         return "{}: {}\n".format(self.fam, self.event)
+    def __eq__(self, other):
+        return self.fam==other.fam and self.event==other.event
 
 class FamIdent(FamEvent):
     event = "identical"
@@ -810,6 +812,8 @@ class FamDupl(FamEvent):
         self.into = subfam
     def __str__(self):
         return "{} --> {}\n".format(self.fam, self.into)
+    def __eq__(self, other):
+        return super().__eq__(other) and self.into==other.into
 
 class LevelComparisonResult(object):
     def __init__(self, lev1, lev2):
@@ -904,17 +908,18 @@ class GroupAnnotator(object):
             for child in list(node):
                 self._addTaxRangeR(child, last)
         elif OrthoXMLQuery.is_geneRef_node(node):
-            # we check whether the parent node is a direct ancester in the
-            # tax or not. if not, we creaete a fake orthologGroup.
+            # to simplify analyses down to the taxlevel of a single species
+            # we add an aditional fake orthologGroup just above each geneRef
+            # element with all the taxRanges between the most specific level
+            # of the parent orthologGroup node and the species itself.
             spec = self.parser.mapGeneToSpecies(node.get('id'))
-            expRange = self.tax.hierarchy[spec].up.name
+            expRange = self.tax.hierarchy[spec].name
             directParent = parent = node.getparent()
             while not self.parser.is_ortholog_group(parent):
                 parent = parent.getparent()
             levOfParent = OrthoXMLQuery.getLevels(parent)
             mostSpecific = self.tax.mostSpecific(levOfParent)
-            if expRange != mostSpecific:
-                self._insertOG(directParent, node, expRange, mostSpecific)
+            self._insertOG(directParent, node, expRange, mostSpecific)
 
     def _insertOG(self, parent, child, specificLev, beforeLev):
         pos = parent.index(child)
