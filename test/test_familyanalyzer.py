@@ -100,6 +100,7 @@ class TaxNodeTest(unittest.TestCase):
         leaves = list(root.iterLeaves())
         self.assertEqual(leaves, [leftleft, leftright, right])
 
+
 class GeneFamilyTest(unittest.TestCase):
 
     def getLastExampleFamily(self, parser=None):
@@ -120,16 +121,71 @@ class GeneFamilyTest(unittest.TestCase):
         members = set(gf.getMemberGenes())
         self.assertSetEqual(expectedMembers, members)
 
-    def membSubSetsAtLevel(self, fam, level, parser):
+    def famMemberGenesAtLevel(self, fam, level):
         gf = fa.GeneFamily(fam)
-        levelAnalysis = gf.analyzeLevel(level, parser)
-        return levelAnalysis.geneClasses()
+        levelAnalysis = gf.analyzeLevel(level)
+        genes = set()
+        for subfam in levelAnalysis:
+            genes.update(subfam.getMemberGenes())
+        return genes
 
-#    def test_humanMemberSubSetsAtPrimates(self):
-#        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
-#        fam = self.getLastExampleFamily(parser)
-#        geneClasses = self.membSubSetsAtLevel(fam, 'Primates', parser)
-#        self.assertFalse(True,"test not yet finished")
+    def test_famMemberAtSubLevel(self):
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        fam = self.getLastExampleFamily(parser)
+        cases = {'Primates': {'3', '13'}, 'Euarchontoglires': {'3', '13', '14', '33', '34'}}
+        for lev, expMemb in cases.items():
+            genes = self.famMemberGenesAtLevel(fam, lev)
+            self.assertSetEqual(genes, expMemb)
+
+    def test_simpleAnalyzeStrategy(self):
+        """test the classification of genes for a few testcases"""
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        fam = fa.GeneFamily(self.getLastExampleFamily(parser))
+        analyzer = fa.BasicLevelAnalysis(parser)
+        summary = analyzer.analyzeGeneFam(fam)
+        hum = summary['HUMAN']
+        self.assertEqual(hum.typ, "SINGLECOPY")
+        self.assertSetEqual(hum.genes, {'3'})
+        ptr = summary['PANTR']
+        self.assertEqual(ptr.typ, "MULTICOPY")
+        self.assertSetEqual(ptr.genes, {'13', '14'})
+
+
+class TwoLineageComparisons(unittest.TestCase):
+    """tests the ability to compare the orthoxml at two
+    lineages."""
+
+    def getFamHistory(self, parser, level):
+        hist = parser.getFamHistory()
+        hist.analyzeLevel(level)
+        return hist
+
+    def compareLevels(self, lev1, lev2):
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        tax = fa.TaxonomyFactory.newTaxonomy(parser)
+        parser.augmentTaxonomyInfo(tax)
+        hist1 = self.getFamHistory(parser, lev1)
+        hist2 = self.getFamHistory(parser, lev2)
+        return hist1.compare(hist2)
+
+    def test_Levels(self):
+        levPairs = [("Mammalia", "Primates"),
+                    ("Vertebrata", "Euarchontoglires"),
+                    ("Euarchontoglires", "Rodens"),
+                    ("Vertebrata", "HUMAN"),
+                    ("Primates", "PANTR"),
+                    ("Primates", "HUMAN")]
+        expRes = [[fa.FamIdent('1'), fa.FamIdent("2"), fa.FamDupl("3", ["3.1a", "3.1b"])],
+                  [fa.FamIdent("1"), fa.FamNovel("2"), fa.FamDupl("3", ["3.1a", "3.1b"])],
+                  [fa.FamIdent("1"), fa.FamIdent("2"), fa.FamIdent("3.1a"), fa.FamIdent("3.1b")],
+                  [fa.FamIdent("1"), fa.FamNovel("2"), fa.FamDupl("3", "3.1a")],
+                  [fa.FamIdent("1"), fa.FamIdent("2"), fa.FamIdent("3.1a"), fa.FamIdent("3.1b")],
+                  [fa.FamIdent("1"), fa.FamIdent("2"), fa.FamIdent("3.1a"), fa.FamLost("3.1b")]]
+        for i in range(len(levPairs)):
+            lev1, lev2 = levPairs[i]
+            comp = self.compareLevels(lev1, lev2)
+            comp.fams.sort(key=lambda x: x.fam)
+            self.assertListEqual(comp.fams, expRes[i], "failed for {} vs {}".format(lev1, lev2))
 
 
 class TaxonomyFactoryTest(unittest.TestCase):
@@ -144,8 +200,3 @@ class TaxonomyFactoryTest(unittest.TestCase):
         tax = fa.TaxonomyFactory.newTaxonomy(p)
         expectedLevels = p.getLevels().union(p.getSpeciesSet())
         self.assertSetEqual(set(tax.hierarchy.keys()), expectedLevels)
-
-
-class SimpleTaxonomyTest(unittest.TestCase):
-    def setUp(self):
-        pass

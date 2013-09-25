@@ -4,11 +4,10 @@ name = 'familyanalyzer'
 
 setup(
     name=name,
-    version='0.3.0',
+    version='0.4.0',
     author='Adrian Altenhoff',
     author_email='adrian.altenhoff@inf.ethz.ch',
     description='todoc',
     packages=find_packages(),
     install_requires=['lxml'],
 )
-
