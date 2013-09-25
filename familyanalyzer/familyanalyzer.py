@@ -11,6 +11,7 @@ import itertools
 import io
 import re
 
+
 class ElementError(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -67,7 +68,7 @@ class OrthoXMLQuery(object):
         any TaxRange property tags associated, an empty list is
         returned."""
         propTags = cls.getSubNodes("property", element, recursivly=False)
-        res = [t.get('value') for t in propTags if t.get('name')=='TaxRange']
+        res = [t.get('value') for t in propTags if t.get('name') == 'TaxRange']
         return res
 
 
@@ -256,8 +257,8 @@ class OrthoXMLParser(object):
         self._xrefs = xref
         self._species = frozenset({z.get('name') for z in mapping.values()})
         self._levels = frozenset({n.get('value')
-            for n in self._findSubNodes("property")
-            if n.get('name') == "TaxRange"})
+                                  for n in self._findSubNodes("property")
+                                  if n.get('name') == "TaxRange"})
 
     def getUbiquitusFamilies(self, minCoverage=.5):
         families = self.getToplevelGroups()
@@ -334,7 +335,7 @@ class TaxonomyFactory(object):
             else:
                 suffix = arg[arg.rindex('.'):]
                 if suffix in ['.nwk', '.tree', '.newick']:
-                    return NewickTaxonomy(arg) 
+                    return NewickTaxonomy(arg)
         elif isinstance(arg, OrthoXMLParser):
             return TaxRangeOrthoXMLTaxonomy(arg)
         else:
@@ -377,7 +378,7 @@ class Taxonomy(object):
         # the one with len(levels)-1 is the most specific level
         cnts = self._countParentAmongLevelSet(levels)
         for lev, cnt in cnts.items():
-            if cnt==len(levels)-1:
+            if cnt == len(levels)-1:
                 return lev
         raise Exception("Non of the element is subelement of all others")
 
@@ -387,7 +388,7 @@ class Taxonomy(object):
         # the one with len(levels)-1 is the most specific level
         cnts = self._countParentAmongLevelSet(levels)
         for lev, cnt in cnts.items():
-            if cnt==0:
+            if cnt == 0:
                 return lev
         raise Exception("Non of the element is the root of all others")
 
@@ -429,7 +430,6 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
                     if OrthoXMLParser.is_evolutionary_node(child)]
         geneRefs = [node for node in directChildNodes if OrthoXMLQuery.is_geneRef_node(node)]
         speciesOfGenes = {self.parser.mapGeneToSpecies(x.get('id')) for x in geneRefs}
-
 
         # recursively process childreen nodes
         subLevs = speciesOfGenes
@@ -527,7 +527,7 @@ class GeneFamily(object):
 
     def getMemberGenes(self):
         members = self.root.findall('.//{{{ns0}}}geneRef'.
-                format(**OrthoXMLParser.ns))
+                                    format(**OrthoXMLParser.ns))
         return [x.get('id') for x in members]
 
     def getFamId(self):
@@ -583,7 +583,6 @@ class Singletons(GeneFamily):
 
     def getLevels(self):
         return None
-
 
     def analyzeLevel(self, level, parser):
         return self
@@ -641,8 +640,7 @@ class BasicLevelAnalysis(object):
         for spec in iter(spec2genes.keys()):
             nrMemb = len(spec2genes[spec])
             gclass = self.GeneClasses.MULTICOPY if nrMemb > 1 else self.GeneClasses.SINGLECOPY
-            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
-                                              spec2genes[spec])
+            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass], spec2genes[spec])
         return summary
 
 
@@ -665,10 +663,11 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         if lev is not None:
             # if several levels exist at this node, use oldest one
             mostGeneralLevel = self.tax.mostGeneralLevel(lev)
-            speciesCoveredByLevel = {l.name for l in self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
+            speciesCoveredByLevel = {l.name for l in
+                                     self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
             lostSpecies = speciesCoveredByLevel.difference(summary.keys())
             for lost in lostSpecies:
-                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST",[])
+                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
         return summary
 
 
@@ -722,8 +721,8 @@ class FamHistory(object):
 
         fd.write("FamilyAnalysis at {}\n".format(self.analyzedLevel))
         for fam in self.geneFamList:
-            fam.write(fd, speciesFilter, idFormatter=lambda gid:
-                    self.parser.mapGeneToXRef(gid, self.XRefTag))
+            fam.write(fd, speciesFilter,
+                      idFormatter=lambda gid: self.parser.mapGeneToXRef(gid, self.XRefTag))
 
     def __str__(self):
         fd = io.StringIO()
@@ -734,15 +733,15 @@ class FamHistory(object):
 
     def _find_subfamilies(self, query, targetlist):
         """ Used in compare method - fixes s.startswith bug where
-        queries such as '20' would return subfamilies '200', '2000', etc. 
-        Now '20' will only return subfamilies of the form '20.1a', 20.1b.2c.3e', 
+        queries such as '20' would return subfamilies '200', '2000', etc.
+        Now '20' will only return subfamilies of the form '20.1a', 20.1b.2c.3e',
         etc. """
         result = []
-        q = query.split('.') # e.g. 8.1b.2a -> ['8', '1b', '2a']
+        q = query.split('.')   # e.g. 8.1b.2a -> ['8', '1b', '2a']
 
         for family in targetlist:
             name_elements = family.split('.')
-            if name_elements[:len(q)] == q: # exact prefix match to query
+            if name_elements[:len(q)] == q:  # exact prefix match to query
                 result.append(family)
 
         return result
@@ -780,40 +779,51 @@ class FamHistory(object):
         for f in otherfamIds:
             topId = f.split('.')[0]
             pattern = re.compile(r"{}(.|$)".format(topId))
-            if not any(map(lambda x:pattern.match(x) is not None, famIds)):
+            if not any(map(lambda x: pattern.match(x) is not None, famIds)):
                 comp.addFamily(FamNovel(f))
         return comp
 
 
 class FamEvent(object):
     event = None
+
     def __init__(self, fam):
-        self.fam=fam
+        self.fam = fam
+
     def __str__(self):
         return "{}: {}\n".format(self.fam, self.event)
+
     def __eq__(self, other):
-        return self.fam==other.fam and self.event==other.event
+        return self.fam == other.fam and self.event == other.event
+
 
 class FamIdent(FamEvent):
     event = "identical"
 
+
 class FamNovel(FamEvent):
     event = "novel"
+
 
 class FamLost(FamEvent):
     event = "lost"
 
+
 class FamDupl(FamEvent):
     event = "duplicated"
+
     def __init__(self, fam, subfam):
         super().__init__(fam)
         if isinstance(subfam, list):
             subfam = "; ".join(subfam)
         self.into = subfam
+
     def __str__(self):
         return "{} --> {}\n".format(self.fam, self.into)
+
     def __eq__(self, other):
-        return super().__eq__(other) and self.into==other.into
+        return super().__eq__(other) and self.into == other.into
+
 
 class LevelComparisonResult(object):
     def __init__(self, lev1, lev2):
@@ -823,14 +833,13 @@ class LevelComparisonResult(object):
 
     def addFamily(self, famEvent):
         self.fams.append(famEvent)
-    
+
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
-                format(self.lev1, self.lev2))
-        self.fams.sort(key=lambda x:x.fam)
+                 format(self.lev1, self.lev2))
+        self.fams.sort(key=lambda x: x.fam)
         for fam in self.fams:
             fd.writelines(str(fam))
-
 
 
 class GroupAnnotator(object):
@@ -932,7 +941,7 @@ class GroupAnnotator(object):
 
     def _createTaxRangeTag(self, lev):
         return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
-                attrib=dict(name='TaxRange', value=lev))
+                             attrib=dict(name='TaxRange', value=lev))
 
     def annotateMissingTaxRanges(self, tax, propagate_top=False):
         """This function adds left-out taxrange property elements to
@@ -958,13 +967,25 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Analyze Hierarchical OrthoXML families.')
     parser.add_argument('--xreftag', default=None, help='xref tag of genes to report')
-    parser.add_argument('--show_levels', action='store_true', help='show available levels and species and quit')
-    parser.add_argument('-r', '--use-recursion', action='store_true', help='Use recursion to sample families that are a subset of the query')
-    parser.add_argument('--taxonomy', default='implicit', help='Taxonomy used to reconstruct intermediate levels. Has to be either "implicit" (default) or a path to a file. If set to "implicit", the taxonomy is extracted from the input OrthoXML file')
-    parser.add_argument('--propagate_top', action='store_true', help='propagate taxonomy levels up to the toplevel. If not set, only intermediate levels are propagated.')
-    parser.add_argument('--show_taxonomy', action='store_true', help='show taxonomy used to infer missing levels')
-    parser.add_argument('--store_augmented_xml', default=None, help='if set to a filename, the input orthoxml file with augmented annotations is written')
-    parser.add_argument('--compare_second_level',default=None, help='compare secondary level with primary one')
+    parser.add_argument('--show_levels', action='store_true',
+                        help='show available levels and species and quit')
+    parser.add_argument('-r', '--use-recursion', action='store_true',
+                        help="Use recursion to sample families that are a subset of the query")
+    parser.add_argument('--taxonomy', default='implicit',
+                        help=("Taxonomy used to reconstruct intermediate levels. "
+                              "Has to be either 'implicit' (default) or a path to "
+                              "a file. If set to 'implicit', the taxonomy is extracted "
+                              "from the input OrthoXML file"))
+    parser.add_argument('--propagate_top', action='store_true',
+                        help=("propagate taxonomy levels up to the toplevel. If "
+                              "not set, only intermediate levels are propagated."))
+    parser.add_argument('--show_taxonomy', action='store_true',
+                        help='show taxonomy used to infer missing levels')
+    parser.add_argument('--store_augmented_xml', default=None,
+                        help=("if set to a filename, the input orthoxml file with "
+                              "augmented annotations is written"))
+    parser.add_argument('--compare_second_level', default=None,
+                        help='compare secondary level with primary one')
     parser.add_argument('path', help='path to orthoxml file')
     parser.add_argument('level', help='taxonomic level at which analysis should be done')
     parser.add_argument('species', nargs="+", help='(list of) species to be analyzed')
@@ -973,8 +994,8 @@ if __name__ == "__main__":
     op = OrthoXMLParser(args.path)
     if args.show_levels:
         print("Species:\n{0}\n\nLevels:\n{1}".format(
-                '\n'.join(sorted(list(op.getSpeciesSet()))),
-                '\n'.join(sorted(op.getLevels()))))
+              '\n'.join(sorted(list(op.getSpeciesSet()))),
+              '\n'.join(sorted(op.getLevels()))))
         sys.exit()
     print("Analyzing {} on taxlevel {}".format(args.path, args.level))
     print("Species found:")

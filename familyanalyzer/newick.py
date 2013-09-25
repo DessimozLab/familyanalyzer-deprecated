@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
-import io, collections, os
+import io
+import collections
+import os
 from familyanalyzer import TaxNode, Taxonomy, enum
+
 
 class Streamer(object):
 
@@ -25,7 +28,7 @@ class Streamer(object):
 
         if self.stream.closed:
             raise StopIteration
-        
+
         if char == '':
             self.stream.close()
             raise StopIteration
@@ -40,15 +43,16 @@ class Streamer(object):
 
 Token = collections.namedtuple('Token', 'typ val')
 
+
 class NewickLexer(object):
 
     """ Breaks newick stream into lexing tokens:
     Works as a state machine, like Rob Pike's Go text template parser """
 
-    tokens = enum("EOF", "TREE", "LEAF", "SUBTREE", "LABEL", 
-        "LENGTH", "SUPPORT", "ENDSUB", "ENDTREE")
+    tokens = enum("EOF", "TREE", "LEAF", "SUBTREE", "LABEL",
+                  "LENGTH", "SUPPORT", "ENDSUB", "ENDTREE")
 
-    def __init__(self, streamer):        
+    def __init__(self, streamer):
         self.streamer = streamer
         self.token = None
         self.token_buffer = bytearray()
@@ -102,7 +106,7 @@ class NewickLexer(object):
         for x in self.streamer:
             if x == '(':
                 break
-        
+
         if self.streamer.isclosed():
             self.emit(Token(self.tokens.EOF, -1))
             return self.stop
@@ -126,12 +130,12 @@ class NewickLexer(object):
         self.eat_spaces()
         char = self.streamer.peek()
         if char in ('"', "'"):
-            next(self.streamer) # throw away opening quote 
+            next(self.streamer)  # throw away opening quote
             self._match_delimited(char)
         else:
             despacer = {' ': '_'}
-            self._match_run(str.isalnum, accepted_chars='-_|.', 
-                denied_chars=':,;', replacements=despacer)
+            self._match_run(str.isalnum, accepted_chars='-_|.',
+                            denied_chars=':,;', replacements=despacer)
         label = self.token_buffer.decode()
         if label == '':
             label = None
@@ -142,11 +146,11 @@ class NewickLexer(object):
     def lex_length(self):
         char = self.streamer.peek()
         if char == ':':
-            self.streamer.next() # throw away colon
+            self.streamer.next()  # throw away colon
             self._match_number()
             if len(self.token_buffer) == 0:
                 num = None
-            else: 
+            else:
                 num = float(self.token_buffer)
         else:
             num = None
@@ -169,7 +173,7 @@ class NewickLexer(object):
         elif char == ')':
             next(self.streamer)
             self.emit(Token(self.tokens.ENDSUB, ')'))
-            peek = self.streamer.peek() # is a label or a support value next?
+            peek = self.streamer.peek()  # is a label or a support value next?
             if peek.isdigit() or peek == '.':
                 return self.lex_support
             return self.lex_label
@@ -188,7 +192,7 @@ class NewickLexer(object):
         return self.lex_length
 
     def _match_delimited(self, delimiter):
-        pos = self.pos() - 2 # stream is 2 chars ahead of the opening delimiter
+        pos = self.pos() - 2  # stream is 2 chars ahead of the opening delimiter
         for char in self.streamer:
             if char == delimiter:
                 return
@@ -202,12 +206,12 @@ class NewickLexer(object):
         raise LexError(msg)
 
     def _match(self, predicate, accepted_chars='', denied_chars='',
-        replacements=None):
+               replacements=None):
         """ Checks next character in stream. If predicate returns True, or char
         is in `accepted_chars`, advances the stream and returns 1. Else, or if
         the char is in `denied_chars`, doesn't advance the stream and returns 0.
         Replacements is an optional dictionary that can be used to replace the
-        streamed character with an alternative (e.g. replace spaces with 
+        streamed character with an alternative (e.g. replace spaces with
         underscores). """
 
         replacements = (replacements or {})
@@ -216,10 +220,10 @@ class NewickLexer(object):
 
         if predicate(char) or char in accepted_chars:
             if len(char) == 1:
-                self.buffer(char) 
-            next(self.streamer) # advance stream
+                self.buffer(char)
+            next(self.streamer)  # advance stream
             return 1
-        elif char in denied_chars:                
+        elif char in denied_chars:
             return 0
         else:
             return 0
@@ -236,30 +240,31 @@ class NewickLexer(object):
         except StopIteration:
             raise LexError('Unexpected end of stream')
 
-    def _match_number(self): 
-        digits = 0      
+    def _match_number(self):
+        digits = 0
         self._match(lambda x: False, '-+')
         digits += self._match_run(str.isdigit)
         if self._match(lambda x: False, '.'):
             digits += self._match_run(str.isdigit)
-        
+
         if digits > 0:
             if self._match(lambda x: False, 'eE'):
                 self._match(lambda x: False, '-+')
                 self._match_run(str.isdigit)
-        
+
         else:
             self.empty_buffer()
+
 
 class NewickTaxonomy(Taxonomy):
 
     """ Create a taxonomy from a file in newick format. The file should contain
-    one tree (further trees are ignored). Only the tree topology is used - 
-    branch lengths and bootstrap support values are thown away. 
+    one tree (further trees are ignored). Only the tree topology is used -
+    branch lengths and bootstrap support values are thown away.
     The leaf labels should match those in the orthoXML. Inner labels
-    should match too, but for OMA XML will be automatically generated if 
+    should match too, but for OMA XML will be automatically generated if
     auto_annotate == True """
-    
+
     def __init__(self, filename):
         if not os.path.exists(filename):
             raise Exception('File not found: {0}'.format(filename))
@@ -270,15 +275,15 @@ class NewickTaxonomy(Taxonomy):
         self.parse()
 
     def _get_label(self, tokens):
-        """ Get the node data attributes 'label' and 'length'. Assumes these 
-        will be the next tokens in the stream. Throws ParseError if they are 
+        """ Get the node data attributes 'label' and 'length'. Assumes these
+        will be the next tokens in the stream. Throws ParseError if they are
         not. """
         label = next(self.lexer)
         if label.typ not in (tokens.LABEL, tokens.SUPPORT):
             raise Exception(
                 'Expected a label or a support value, found {0}'.format(
                     label))
-        
+
         length = next(self.lexer)
         if length.typ != tokens.LENGTH:
             raise Exception('Expected a length, found {0}'.format(
@@ -316,13 +321,13 @@ class NewickTaxonomy(Taxonomy):
             self.hierarchy[root.name] = root
             self.nodes.add(root.name)
             return
-            
+
         if not root.up:
             self.root = (root.name or 'LUCA')
 
         self.hierarchy[root.name] = root
         self.nodes.add(root.name)
-        
+
         for child in root.down:
             self.populate(child)
 
@@ -333,7 +338,7 @@ class NewickTaxonomy(Taxonomy):
         for token in self.lexer:
             if token.typ == tokens.EOF:
                 return
-            
+
             elif token.typ == tokens.TREE:
                 # invent a name for the node
                 n = TaxNode(str(tmp_name))
@@ -378,12 +383,12 @@ class NewickTaxonomy(Taxonomy):
                 if isinstance(label, str):
                     subtree.name = label
 
-            elif token.typ == tokens.ENDTREE: # trigger for tree-finalising functions
+            elif token.typ == tokens.ENDTREE:  # trigger for tree-finalising functions
                 self.populate(self.root)
                 return
 
-            elif token.typ in (tokens.LABEL, tokens.LENGTH, tokens.SUPPORT): 
-                raise Exception('Unexpected token in stream: {0}'.format(token))    
+            elif token.typ in (tokens.LABEL, tokens.LENGTH, tokens.SUPPORT):
+                raise Exception('Unexpected token in stream: {0}'.format(token))
 
             else:
                 raise Exception('Not sure what happened')
