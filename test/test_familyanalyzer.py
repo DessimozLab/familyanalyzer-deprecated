@@ -149,7 +149,37 @@ class GeneFamilyTest(unittest.TestCase):
         self.assertEqual(ptr.typ,"MULTICOPY")
         self.assertSetEqual(ptr.genes, {'13','14'})
 
-        
+
+class TwoLineageComparisons(unittest.TestCase):
+    """tests the ability to compare the orthoxml at two 
+    lineages."""
+
+    def getFamHistory(self, parser, level):
+        hist = parser.getFamHistory()
+        hist.analyzeLevel(level)
+        return hist
+
+    def compareLevels(self, lev1, lev2):
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        tax = fa.TaxonomyFactory.newTaxonomy(parser)
+        parser.augmentTaxonomyInfo(tax)
+        hist1 = self.getFamHistory(parser, lev1)
+        hist2 = self.getFamHistory(parser, lev2)
+        return hist1.compare(hist2)
+
+    def test_Levels(self):
+        levPairs = [("Mammalia","Primates"),
+                ("Vertebrata","Euarchontoglires"),
+                ("Euarchontoglires","Rodens")]
+        expRes = [[fa.FamIdent('1'), fa.FamIdent("2"), fa.FamDupl("3",["3.1a","3.1b"])],
+                [fa.FamIdent("1"),fa.FamNovel("2"), fa.FamDupl("3",["3.1a","3.1b"])],
+                [fa.FamIdent("1"),fa.FamIdent("2"), fa.FamIdent("3.1a"),fa.FamIdent("3.1b")]]
+        for i in range(len(levPairs)):
+            lev1, lev2 = levPairs[i]
+            comp = self.compareLevels(lev1,lev2)
+            comp.fams.sort(key=lambda x:x.fam)
+            self.assertListEqual(comp.fams, expRes[i], "failed for {} vs {}".format(lev1, lev2))
+
 
 class TaxonomyFactoryTest(unittest.TestCase):
 
@@ -165,6 +195,3 @@ class TaxonomyFactoryTest(unittest.TestCase):
         self.assertSetEqual(set(tax.hierarchy.keys()), expectedLevels)
 
 
-class SimpleTaxonomyTest(unittest.TestCase):
-    def setUp(self):
-        pass

@@ -791,6 +791,8 @@ class FamEvent(object):
         self.fam=fam
     def __str__(self):
         return "{}: {}\n".format(self.fam, self.event)
+    def __eq__(self, other):
+        return self.fam==other.fam and self.event==other.event
 
 class FamIdent(FamEvent):
     event = "identical"
@@ -810,6 +812,8 @@ class FamDupl(FamEvent):
         self.into = subfam
     def __str__(self):
         return "{} --> {}\n".format(self.fam, self.into)
+    def __eq__(self, other):
+        return super().__eq__(other) and self.into==other.into
 
 class LevelComparisonResult(object):
     def __init__(self, lev1, lev2):
