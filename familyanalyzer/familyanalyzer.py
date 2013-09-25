@@ -908,17 +908,18 @@ class GroupAnnotator(object):
             for child in list(node):
                 self._addTaxRangeR(child, last)
         elif OrthoXMLQuery.is_geneRef_node(node):
-            # we check whether the parent node is a direct ancester in the
-            # tax or not. if not, we creaete a fake orthologGroup.
+            # to simplify analyses down to the taxlevel of a single species
+            # we add an aditional fake orthologGroup just above each geneRef
+            # element with all the taxRanges between the most specific level
+            # of the parent orthologGroup node and the species itself.
             spec = self.parser.mapGeneToSpecies(node.get('id'))
-            expRange = self.tax.hierarchy[spec].up.name
+            expRange = self.tax.hierarchy[spec].name
             directParent = parent = node.getparent()
             while not self.parser.is_ortholog_group(parent):
                 parent = parent.getparent()
             levOfParent = OrthoXMLQuery.getLevels(parent)
             mostSpecific = self.tax.mostSpecific(levOfParent)
-            if expRange != mostSpecific:
-                self._insertOG(directParent, node, expRange, mostSpecific)
+            self._insertOG(directParent, node, expRange, mostSpecific)
 
     def _insertOG(self, parent, child, specificLev, beforeLev):
         pos = parent.index(child)

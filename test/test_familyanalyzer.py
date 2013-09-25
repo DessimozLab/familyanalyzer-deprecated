@@ -170,10 +170,16 @@ class TwoLineageComparisons(unittest.TestCase):
     def test_Levels(self):
         levPairs = [("Mammalia","Primates"),
                 ("Vertebrata","Euarchontoglires"),
-                ("Euarchontoglires","Rodens")]
+                ("Euarchontoglires","Rodens"),
+                ("Vertebrata","HUMAN"),
+                ("Primates","PANTR"),
+                ("Primates","HUMAN")]
         expRes = [[fa.FamIdent('1'), fa.FamIdent("2"), fa.FamDupl("3",["3.1a","3.1b"])],
                 [fa.FamIdent("1"),fa.FamNovel("2"), fa.FamDupl("3",["3.1a","3.1b"])],
-                [fa.FamIdent("1"),fa.FamIdent("2"), fa.FamIdent("3.1a"),fa.FamIdent("3.1b")]]
+                [fa.FamIdent("1"),fa.FamIdent("2"), fa.FamIdent("3.1a"),fa.FamIdent("3.1b")],
+                [fa.FamIdent("1"),fa.FamNovel("2"), fa.FamDupl("3","3.1a")],
+                [fa.FamIdent("1"),fa.FamIdent("2"), fa.FamIdent("3.1a"),fa.FamIdent("3.1b")],
+                [fa.FamIdent("1"),fa.FamIdent("2"), fa.FamIdent("3.1a"),fa.FamLost("3.1b")]]
         for i in range(len(levPairs)):
             lev1, lev2 = levPairs[i]
             comp = self.compareLevels(lev1,lev2)
