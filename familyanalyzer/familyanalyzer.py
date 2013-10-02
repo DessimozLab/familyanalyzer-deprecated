@@ -1201,7 +1201,7 @@ if __name__ == "__main__":
         hist2.analyzeLevel(args.compare_second_level)
         print("Comparing taxlevel {}\n to taxlevel {}".format(
             args.level, args.compare_second_level))
-        comp = hist.compare(hist2)
+        comp = hist.compareFast(hist2)
         comp.write(sys.stdout)
 
     if args.store_augmented_xml is not None:
