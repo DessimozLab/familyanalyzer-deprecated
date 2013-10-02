@@ -525,6 +525,26 @@ class GeneFamily(object):
             raise ElementError('Not an orthologGroup node')
         self.root = root_element
 
+    def __lt__(self, other):
+        return self._cmp() < other._cmp()
+
+    def __gt__(self, other):
+        return self._cmp() > other._cmp()
+
+    def __le__(self, other):
+        return self._cmp() <= other._cmp()
+
+    def __ge__(self, other):
+        return self._cmp() >= other._cmp()
+
+    def __eq__(self, other):
+        return self._cmp() == other._cmp()
+
+    def prefix_match(self, other):
+        query = self._cmp()
+        target = other._cmp()
+        return target[:len(query)] == query
+
     def getMemberGenes(self):
         members = self.root.findall('.//{{{ns0}}}geneRef'.
                                     format(**OrthoXMLParser.ns))
@@ -532,6 +552,22 @@ class GeneFamily(object):
 
     def getFamId(self):
         return self.root.get('og')
+
+    def _cmp(self):
+        """
+        Enable sorting based on LOFT numbering scheme,
+        such that (e.g.)
+            1.1a < 1.1b,
+            1.1b < 1.1c,
+            1.1z < 1.1aa,
+            2 < 10,
+            10 < n/a,
+        """
+        fam = self.getFamId()
+        comp = tuple((0, int(num),) if num else (len(alpha.strip('.')), 
+            alpha.strip('.'),) for (num, alpha) in re.findall(r'(\d+)|(\D+)', 
+            fam))
+        return comp
 
     def getLevels(self):
         return OrthoXMLQuery.getLevels(self.root)
@@ -782,6 +818,141 @@ class FamHistory(object):
             if not any(map(lambda x: pattern.match(x) is not None, famIds)):
                 comp.addFamily(FamNovel(f))
         return comp
+
+    def compareFast(self, other):
+        """ compares two FamilyHistory objects in linear time
+            algorithm implemented in Comparer class
+        """
+        c = Comparer(self, other)
+        c.run()
+        return c.comp
+
+
+class Comparer(object):
+    """
+    Compares two FamilyHistory objects in linear time.
+
+    Algorithm:
+
+    Init: 
+    preprocess input by sorting FamilyHistory geneFamLists
+    maintain pointers to the lists that only move forwards
+
+    Run:
+    If families exactly match:
+        Mark as FamIdent
+        advance both lists one element
+    Else if family2 is a prefix match of family 1:
+        While family1.prefix_match(family2):
+            Mark as FamDupl
+            advance list 2
+        advance list 1
+    Else if family 1 < family 2 (according to sort comparison)
+        While family 1 < family 2:
+            Mark as FamLost
+            advance list 1
+    Else if family 1 > family 2 
+        While family 1 > family 2:
+            Mark as FamNovel
+            advance list 2
+    When list 1 is exhausted:
+        mark all remaining members of list 2 as FamNovel
+    When list 2 is exhausted:
+        mark all remaining members of list 1 as FamLost
+
+    End:
+    When both lists are exhausted
+
+    """
+
+    def __init__(self, fam_history_1, fam_history_2):
+        self.i1 = (x for x in sorted(fam_history_1.geneFamList) 
+                    if not x.getFamId() == 'n/a')
+        self.i2 = (x for x in sorted(fam_history_2.geneFamList) 
+                    if not x.getFamId() == 'n/a')
+        self.f1 = None
+        self.f2 = None
+        self.advance_i1()
+        self.advance_i2()
+        self.comp = LevelComparisonResult(fam_history_1.analyzedLevel, 
+            fam_history_2.analyzedLevel)
+
+    def run(self):
+        while self.f1 is not None and self.f2 is not None:
+            if self.f1 == self.f2:
+                self.ident()
+
+            elif self.f1.prefix_match(self.f2):
+                self.dupl()
+
+            elif self.f1 < self.f2:
+                self.lost()
+
+            elif self.f1 > self.f2:
+                self.novel()
+
+            else:
+                raise Exception('Unexpected state')
+
+    def ident(self):
+        self.comp.addFamily(FamIdent(self.f1.getFamId()))
+        self.advance_i1()
+        self.advance_i2()
+        if self.f1 is None:
+            self.l1_exhausted()
+        if self.f2 is None:
+            self.l2_exhausted()
+
+    def dupl(self):
+        m = list()
+        while self.f1.prefix_match(self.f2):
+            m.append(self.f2)
+            self.advance_i2()
+            if self.f2 is None:
+                self.l2_exhausted()
+        self.comp.addFamily(FamDupl(self.f1.getFamId(),
+            '; '.join(gf.getFamId() for gf in m)))
+        self.advance_i1()
+        if self.f1 is None:
+            self.l1_exhausted()
+
+    def lost(self):
+        while self.f1 < self.f2 and not self.f1.prefix_match(self.f2):
+            self.comp.addFamily(FamLost(self.f1.getFamId()))
+            self.advance_i1()
+            if self.f1 is None:
+                self.l1_exhausted()
+
+    def novel(self):
+        while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
+            self.comp.addFamily(FamNovel(self.f2.getFamId()))
+            self.advance_i2()
+            if self.f2 is None:
+                self.l2_exhausted()
+
+    def advance_i1(self):
+        try:
+            val = next(self.i1)
+        except StopIteration:
+            val = None
+        self.f1 = val
+
+    def advance_i2(self):
+        try:
+            val = next(self.i2)
+        except StopIteration:
+            val = None
+        self.f2 = val
+
+    def l1_exhausted(self):
+        while self.f2 is not None:
+            self.comp.addFamily(FamNovel(self.f2.getFamId()))
+            self.advance_i2()
+
+    def l2_exhausted(self):
+        while self.f1 is not None:
+            self.comp.addFamily(FamLost(self.f1.getFamId()))
+            self.advance_i1()
 
 
 class FamEvent(object):
