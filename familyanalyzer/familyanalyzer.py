@@ -827,6 +827,22 @@ class FamHistory(object):
         c.run()
         return c.comp
 
+    def compareLeaf(self, leaf):
+        comp = LevelComparisonResult(self.analyzedLevel, leaf)
+        for gfam in self.geneFamList:
+            summary = gfam.summary.get(leaf, SummaryOfSpecies("LOSS", list()))
+            if summary.typ == 'LOSS':
+                comp.addFamily(FamLost(gfam.getFamId()))
+            elif summary.typ == 'SINGLECOPY':
+                comp.addFamily(FamIdent(gfam.getFamId()))
+            elif summary.typ == 'MULTICOPY':
+                comp.addFamily(FamDupl(gfam.getFamId(),
+                    '; '.join(summary.genes)))
+            elif summary.typ == 'SINGLETON':
+                for g in summary.genes:
+                    comp.addFamily(FamNovel(g))
+
+        return comp
 
 class Comparer(object):
     """
