@@ -1012,6 +1012,11 @@ class FamDupl(FamEvent):
 
 
 class LevelComparisonResult(object):
+
+    sort_key = staticmethod(lambda item: tuple((int(num) if num else alpha) for 
+                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam)))
+                    # better sorting - numerical not lexicographical
+
     def __init__(self, lev1, lev2):
         self.fams = list()
         self.lev1 = lev1
@@ -1023,7 +1028,7 @@ class LevelComparisonResult(object):
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
                  format(self.lev1, self.lev2))
-        self.fams.sort(key=lambda x: x.fam)
+        self.fams.sort(key=self.sort_key)
         for fam in self.fams:
             fd.writelines(str(fam))
 
