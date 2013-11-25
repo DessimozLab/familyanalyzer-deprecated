@@ -878,7 +878,6 @@ class Comparer(object):
 
     End:
     When both lists are exhausted
-
     """
 
     def __init__(self, fam_history_1, fam_history_2):
@@ -910,14 +909,16 @@ class Comparer(object):
             else:
                 raise Exception('Unexpected state')
 
+        if self.f1 is None:
+            self.l1_exhausted()
+
+        if self.f2 is None:
+            self.l2_exhausted()
+
     def ident(self):
         self.comp.addFamily(FamIdent(self.f1.getFamId()))
         self.advance_i1()
         self.advance_i2()
-        if self.f1 is None:
-            self.l1_exhausted()
-        if self.f2 is None:
-            self.l2_exhausted()
 
     def dupl(self):
         m = list()
@@ -925,26 +926,24 @@ class Comparer(object):
             m.append(self.f2)
             self.advance_i2()
             if self.f2 is None:
-                self.l2_exhausted()
+                break
         self.comp.addFamily(FamDupl(self.f1.getFamId(),
             '; '.join(gf.getFamId() for gf in m)))
         self.advance_i1()
-        if self.f1 is None:
-            self.l1_exhausted()
 
     def lost(self):
         while self.f1 < self.f2 and not self.f1.prefix_match(self.f2):
             self.comp.addFamily(FamLost(self.f1.getFamId()))
             self.advance_i1()
             if self.f1 is None:
-                self.l1_exhausted()
+                break
 
     def novel(self):
         while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
             self.comp.addFamily(FamNovel(self.f2.getFamId()))
             self.advance_i2()
             if self.f2 is None:
-                self.l2_exhausted()
+                break
 
     def advance_i1(self):
         try:
