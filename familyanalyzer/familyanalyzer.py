@@ -827,6 +827,22 @@ class FamHistory(object):
         c.run()
         return c.comp
 
+    def compareLeaf(self, leaf):
+        comp = LevelComparisonResult(self.analyzedLevel, leaf)
+        for gfam in self.geneFamList:
+            summary = gfam.summary.get(leaf, SummaryOfSpecies("LOSS", list()))
+            if summary.typ == 'LOSS':
+                comp.addFamily(FamLost(gfam.getFamId()))
+            elif summary.typ == 'SINGLECOPY':
+                comp.addFamily(FamIdent(gfam.getFamId()))
+            elif summary.typ == 'MULTICOPY':
+                comp.addFamily(FamDupl(gfam.getFamId(),
+                    '; '.join(summary.genes)))
+            elif summary.typ == 'SINGLETON':
+                for g in summary.genes:
+                    comp.addFamily(FamNovel(g))
+
+        return comp
 
 class Comparer(object):
     """
@@ -862,7 +878,6 @@ class Comparer(object):
 
     End:
     When both lists are exhausted
-
     """
 
     def __init__(self, fam_history_1, fam_history_2):
@@ -894,14 +909,16 @@ class Comparer(object):
             else:
                 raise Exception('Unexpected state')
 
+        if self.f1 is None:
+            self.l1_exhausted()
+
+        if self.f2 is None:
+            self.l2_exhausted()
+
     def ident(self):
         self.comp.addFamily(FamIdent(self.f1.getFamId()))
         self.advance_i1()
         self.advance_i2()
-        if self.f1 is None:
-            self.l1_exhausted()
-        if self.f2 is None:
-            self.l2_exhausted()
 
     def dupl(self):
         m = list()
@@ -909,26 +926,24 @@ class Comparer(object):
             m.append(self.f2)
             self.advance_i2()
             if self.f2 is None:
-                self.l2_exhausted()
+                break
         self.comp.addFamily(FamDupl(self.f1.getFamId(),
             '; '.join(gf.getFamId() for gf in m)))
         self.advance_i1()
-        if self.f1 is None:
-            self.l1_exhausted()
 
     def lost(self):
         while self.f1 < self.f2 and not self.f1.prefix_match(self.f2):
             self.comp.addFamily(FamLost(self.f1.getFamId()))
             self.advance_i1()
             if self.f1 is None:
-                self.l1_exhausted()
+                break
 
     def novel(self):
         while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
             self.comp.addFamily(FamNovel(self.f2.getFamId()))
             self.advance_i2()
             if self.f2 is None:
-                self.l2_exhausted()
+                break
 
     def advance_i1(self):
         try:
@@ -997,6 +1012,11 @@ class FamDupl(FamEvent):
 
 
 class LevelComparisonResult(object):
+
+    sort_key = staticmethod(lambda item: tuple((int(num) if num else alpha) for 
+                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam)))
+                    # better sorting - numerical not lexicographical
+
     def __init__(self, lev1, lev2):
         self.fams = list()
         self.lev1 = lev1
@@ -1008,7 +1028,7 @@ class LevelComparisonResult(object):
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
                  format(self.lev1, self.lev2))
-        self.fams.sort(key=lambda x: x.fam)
+        self.fams.sort(key=self.sort_key)
         for fam in self.fams:
             fd.writelines(str(fam))
 
