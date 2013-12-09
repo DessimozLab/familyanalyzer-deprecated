@@ -507,13 +507,30 @@ class TaxNode(object):
                 .format(self.name, self.up.name, p.name))
         self.up = p
 
+    def isLeaf(self):
+        return len(self.down) == 0
+
+    def isInner(self):
+        return not self.isLeaf()
+
+    def isRoot(self):
+        return self.up is None
+
+    def iterDescendents(self):
+        yield self
+        for child in self.down:
+            for elem in child.iterDescendents():
+                yield elem
+
     def iterLeaves(self):
-        if len(self.down) == 0:
-            yield self
-        else:
-            for child in self.down:
-                for elem in child.iterLeaves():
-                    yield elem
+        for elem in self.iterDescendents():
+            if elem.isLeaf():
+                yield elem
+
+    def iterInnerNodes(self):
+        for elem in self.iterDescendents():
+            if elem.isInner():
+                yield elem
 
 
 class GeneFamily(object):
