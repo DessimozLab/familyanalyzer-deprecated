@@ -545,6 +545,9 @@ class GeneFamily(object):
             raise ElementError('Not an orthologGroup node')
         self.root = root_element
 
+    def __repr__(self):
+        return '{} (id#={})'.format(self.__class__.__name__, self.getFamId())
+
     def __lt__(self, other):
         return self._cmp() < other._cmp()
 
@@ -848,6 +851,9 @@ class FamHistory(object):
         return c.comp
 
     def compareLeaf(self, leaf):
+        """
+        Com
+        """
         comp = LevelComparisonResult(self.analyzedLevel, leaf)
         for gfam in self.geneFamList:
             if gfam.getFamId() == 'n/a':
@@ -1035,9 +1041,11 @@ class FamDupl(FamEvent):
 
 class LevelComparisonResult(object):
 
-    #sort_key = staticmethod(lambda item: tuple((int(num) if num else alpha) for 
-    #                (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam)))
-    #                # better sorting - numerical not lexicographical
+    """
+    Result of comparing two 'FamHistory' objects at different levels
+    on the tree.
+
+    """
 
     @staticmethod
     def sort_key(item):

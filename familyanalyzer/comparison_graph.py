@@ -30,7 +30,7 @@ def get_comparisons(op, tax, histories=None):
     for node in root_node.iterInnerNodes():
         children = node.down
         for child in children:
-            print ('Curr = {}, Desc = {} [{}]'.format(node.name, child.name, ('Leaf' if child.isLeaf() else 'Inner')))
+            # print ('Curr = {}, Desc = {} [{}]'.format(node.name, child.name, ('Leaf' if child.isLeaf() else 'Inner')))
             if child.isLeaf():
                 comp = histories[node.name].compareLeaf(child.name)
             else:
