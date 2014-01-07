@@ -8,6 +8,37 @@ from familyanalyzer.familyanalyzer import *
 Work in progress - will merge into FamilyAnalyzer
 """
 
+def get_histories(op, tax):
+
+    histories = {}
+    for level in tax.hierarchy:
+        node = tax.hierarchy[level]
+        if len(node.down) > 0:
+            history = op.getFamHistory()
+            history.analyzeLevel(level)
+            histories[level] = history
+
+    return histories
+
+def get_comparisons(op, tax, histories=None):
+
+    if histories is None:
+        histories = get_histories(op, tax)
+
+    comparisons = {}
+    root_node = tax.hierarchy[tax.root]
+    for node in root_node.iterInnerNodes():
+        children = node.down
+        for child in children:
+            print ('Curr = {}, Desc = {} [{}]'.format(node.name, child.name, ('Leaf' if child.isLeaf() else 'Inner')))
+            if child.isLeaf():
+                comp = histories[node.name].compareLeaf(child.name)
+            else:
+                comp = histories[node.name].compareFast(histories[child.name])
+            comparisons[(node.name, child.name)] = comp
+    return comparisons
+
+
 class CompEdge(object):
 
     """

@@ -10,6 +10,9 @@ import collections
 import itertools
 import io
 import re
+import sys
+
+MAXINT = sys.maxsize
 
 
 class ElementError(Exception):
@@ -507,13 +510,30 @@ class TaxNode(object):
                 .format(self.name, self.up.name, p.name))
         self.up = p
 
+    def isLeaf(self):
+        return len(self.down) == 0
+
+    def isInner(self):
+        return not self.isLeaf()
+
+    def isRoot(self):
+        return self.up is None
+
+    def iterDescendents(self):
+        yield self
+        for child in self.down:
+            for elem in child.iterDescendents():
+                yield elem
+
     def iterLeaves(self):
-        if len(self.down) == 0:
-            yield self
-        else:
-            for child in self.down:
-                for elem in child.iterLeaves():
-                    yield elem
+        for elem in self.iterDescendents():
+            if elem.isLeaf():
+                yield elem
+
+    def iterInnerNodes(self):
+        for elem in self.iterDescendents():
+            if elem.isInner():
+                yield elem
 
 
 class GeneFamily(object):
@@ -830,6 +850,8 @@ class FamHistory(object):
     def compareLeaf(self, leaf):
         comp = LevelComparisonResult(self.analyzedLevel, leaf)
         for gfam in self.geneFamList:
+            if gfam.getFamId() == 'n/a':
+                continue # skip singletons (NB - discuss this w/Adrian)
             summary = gfam.summary.get(leaf, SummaryOfSpecies("LOSS", list()))
             if summary.typ == 'LOSS':
                 comp.addFamily(FamLost(gfam.getFamId()))
@@ -1013,9 +1035,16 @@ class FamDupl(FamEvent):
 
 class LevelComparisonResult(object):
 
-    sort_key = staticmethod(lambda item: tuple((int(num) if num else alpha) for 
-                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam)))
-                    # better sorting - numerical not lexicographical
+    #sort_key = staticmethod(lambda item: tuple((int(num) if num else alpha) for 
+    #                (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam)))
+    #                # better sorting - numerical not lexicographical
+
+    @staticmethod
+    def sort_key(item):
+        if item.fam == 'n/a':
+            return (MAXINT,)
+        return tuple((int(num) if num else alpha) for 
+                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam))
 
     def __init__(self, lev1, lev2):
         self.fams = list()
