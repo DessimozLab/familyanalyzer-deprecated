@@ -38,7 +38,11 @@ class OrthoXMLQuery(object):
     @classmethod
     def getGeneFromId(cls, id_, root):
         xquery = ".*//{{{}}}gene[@id='{}']".format(cls.ns['ns0'], id_)
-        return root.findall(xquery)
+        genes = root.findall(xquery)
+        if len(genes) > 1:
+            raise ElementError('several gene nodes with id {} exist'.format(id_))
+        gene = genes[0] if len(genes)>0 else None
+        return gene
 
     @classmethod
     def getGroupsAtLevel(cls, level, root):
