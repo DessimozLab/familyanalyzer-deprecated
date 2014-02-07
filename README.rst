@@ -1,6 +1,9 @@
-Family-Analyzer
----------------
+Family-Analyzer: summarize gene family evolution from orthoxml 
+==============================================================
 
+
+Motivation 
+----------
 Family-Analyzer is a tool to further analyze the hierarchical orthologous
 groups from an orthoXML file. More informations on the schema of orthoxml and
 some examples are available at http://orthoxml.org.
@@ -18,7 +21,10 @@ Family-Analyzer is written in python3, with little external dependencies, i.e.
 currently only the lxml library. The setup script should resolve these 
 dependencies automatically. 
 Consider using pip to install the package directly from a checked out git repo
-  pip install -e </path/to/family-analyzer-repo/>
+
+.. code-block:: sh
+
+   pip install -e </path/to/family-analyzer-repo/>
 
 
 
@@ -33,6 +39,8 @@ of the required and optional arguments and what they are used for. Here is
 what the usage output reports as of now. Since this is still work in progress,
 make sure the current usage did not change.
 
+.. code-block:: sh
+   python familyanalyzer/familyanalyzer.py -h
                     
 usage: familyanalyzer.py [-h] [--xreftag XREFTAG] [--show_levels] [-r]
                          [--taxonomy TAXONOMY] [--propagate_top]
@@ -96,4 +104,10 @@ optional arguments:
 Code organisation
 -----------------
 
-TODO: Not yet available. 
+OrthoXMLParser: class which holds the orthoxml file and gives access to its 
+                data and keeps internal mappings to speed up lookups.
+
+
+Taxonomy: class wich provides a basic navigation through the species taxonomy.
+          Objects will be constructed using the TaxonomyFactory and can be 
+          either based on the orthoxml or a newick tree. 
