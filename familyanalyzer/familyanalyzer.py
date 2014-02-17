@@ -38,7 +38,11 @@ class OrthoXMLQuery(object):
     @classmethod
     def getGeneFromId(cls, id_, root):
         xquery = ".*//{{{}}}gene[@id='{}']".format(cls.ns['ns0'], id_)
-        return root.findall(xquery)
+        genes = root.findall(xquery)
+        if len(genes) > 1:
+            raise ElementError('several gene nodes with id {} exist'.format(id_))
+        gene = genes[0] if len(genes)>0 else None
+        return gene
 
     @classmethod
     def getGroupsAtLevel(cls, level, root):
@@ -1194,38 +1198,65 @@ if __name__ == "__main__":
     import sys
 
     parser = argparse.ArgumentParser(description='Analyze Hierarchical OrthoXML families.')
-    parser.add_argument('--xreftag', default=None, help='xref tag of genes to report')
+    parser.add_argument('--xreftag', default=None, 
+                        help=("xref tag of genes to report. OrthoXML allows to "
+                              "store multiple ids and xref annotations per gene "
+                              "as attributes in the species section. If not set, "
+                              "the internal (purely numerical) ids are reported."))
     parser.add_argument('--show_levels', action='store_true',
-                        help='show available levels and species and quit')
+                        help='print the levels and species found in the orthoXML file and quit')
     parser.add_argument('-r', '--use-recursion', action='store_true',
-                        help="Use recursion to sample families that are a subset of the query")
+                        help=("DEPRECATED: Use recursion to sample families that are a "
+                              "subset of the query"))
     parser.add_argument('--taxonomy', default='implicit',
                         help=("Taxonomy used to reconstruct intermediate levels. "
                               "Has to be either 'implicit' (default) or a path to "
-                              "a file. If set to 'implicit', the taxonomy is extracted "
-                              "from the input OrthoXML file"))
+                              "a file in Newick format. The taxonomy might be "
+                              "multifurcating. If set to 'implicit', the "
+                              "taxonomy is extracted from the input OrthoXML file. "
+                              "The orthoXML level do not have to cover all the "
+                              "levels for all families. In order to infer gene losses "
+                              "Family-Analyzer needs to infer these skipped levels "
+                              "and reconcile each family with the complete taxonomy."))
     parser.add_argument('--propagate_top', action='store_true',
-                        help=("propagate taxonomy levels up to the toplevel. If "
-                              "not set, only intermediate levels are propagated."))
+                        help=("propagate taxonomy levels up to the toplevel. As an "
+                              "illustration, consider a gene family in an eukaryotic "
+                              "analysis that has only mammalian genes. Its topmost "
+                              "taxonomic level will therefor be 'Mammalia' and an " 
+                              "ancestral gene was gained at that level. However, if "
+                              "'--propagete-top' is set, the family is assumed to have "
+                              "already be present in the topmost taxonomic level, i.e. "
+                              "Eukaryota in this example, and non-mammalian species "
+                              "have all lost this gene."))
     parser.add_argument('--show_taxonomy', action='store_true',
-                        help='show taxonomy used to infer missing levels')
+                        help='write the taxonomy used to standard out. ')
     parser.add_argument('--store_augmented_xml', default=None,
-                        help=("if set to a filename, the input orthoxml file with "
-                              "augmented annotations is written"))
+                        help=("filename to which the input orthoxml file with "
+                              "augmented annotations is written. The augmented "
+                              "annotations include for example the additional "
+                              "taxonomic levels of orthologGroup and unique HOG "
+                              "IDs."))
     parser.add_argument('--compare_second_level', default=None,
-                        help='compare secondary level with primary one')
-    parser.add_argument('path', help='path to orthoxml file')
+                        help=("Compare secondary level with primary one, i.e. "
+                              "report what happend between the secondary and primary "
+                              "level to the individual histories. Note that the "
+                              "Second level needs to be younger than the primary."))
+    parser.add_argument('orthoxml', help='path to orthoxml file to be analyzed')
     parser.add_argument('level', help='taxonomic level at which analysis should be done')
-    parser.add_argument('species', nargs="+", help='(list of) species to be analyzed')
+    parser.add_argument('species', nargs="+", help=("(list of) species to be analyzed. "
+                              "Note that only genes of the selected species are "
+                              "reported. In order for the output to make sense, "
+                              "the selected species all must be part of the "
+                              "linages specified in 'level' (and --compare_second_level)."))
     args = parser.parse_args()
 
-    op = OrthoXMLParser(args.path)
+    op = OrthoXMLParser(args.orthoxml)
     if args.show_levels:
         print("Species:\n{0}\n\nLevels:\n{1}".format(
               '\n'.join(sorted(list(op.getSpeciesSet()))),
               '\n'.join(sorted(op.getLevels()))))
         sys.exit()
-    print("Analyzing {} on taxlevel {}".format(args.path, args.level))
+    print("Analyzing {} on taxlevel {}".format(args.orthoxml, args.level))
     print("Species found:")
     print("; ".join(op.getSpeciesSet()))
     print("--> analyzing " + "; ".join(args.species))
