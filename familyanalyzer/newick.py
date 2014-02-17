@@ -6,6 +6,15 @@ import os
 from familyanalyzer import TaxNode, Taxonomy, enum
 
 
+class LexError(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
+
+
 class Streamer(object):
 
     """ Wraps an io.StringIO and iterates a byte at a time,
@@ -14,7 +23,7 @@ class Streamer(object):
     def __init__(self, stream):
         """ _peek always looks ahead 1 position """
         if isinstance(stream, str):
-            stream = StringIO(stream)
+            stream = io.StringIO(stream)
         self.stream = stream
         self._peek = self.stream.read(1)
 
