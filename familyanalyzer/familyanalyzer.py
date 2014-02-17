@@ -591,8 +591,8 @@ class GeneFamily(object):
             10 < n/a,
         """
         fam = self.getFamId()
-        comp = tuple((0, int(num),) if num else (len(alpha.strip('.')), 
-            alpha.strip('.'),) for (num, alpha) in re.findall(r'(\d+)|(\D+)', 
+        comp = tuple((0, int(num),) if num else (len(alpha.strip('.')),
+            alpha.strip('.'),) for (num, alpha) in re.findall(r'(\d+)|(\D+)',
             fam))
         return comp
 
@@ -882,7 +882,7 @@ class Comparer(object):
 
     Algorithm:
 
-    Init: 
+    Init:
     preprocess input by sorting FamilyHistory geneFamLists
     maintain pointers to the lists that only move forwards
 
@@ -899,7 +899,7 @@ class Comparer(object):
         While family 1 < family 2:
             Mark as FamLost
             advance list 1
-    Else if family 1 > family 2 
+    Else if family 1 > family 2
         While family 1 > family 2:
             Mark as FamNovel
             advance list 2
@@ -913,15 +913,15 @@ class Comparer(object):
     """
 
     def __init__(self, fam_history_1, fam_history_2):
-        self.i1 = (x for x in sorted(fam_history_1.geneFamList) 
+        self.i1 = (x for x in sorted(fam_history_1.geneFamList)
                     if not x.getFamId() == 'n/a')
-        self.i2 = (x for x in sorted(fam_history_2.geneFamList) 
+        self.i2 = (x for x in sorted(fam_history_2.geneFamList)
                     if not x.getFamId() == 'n/a')
         self.f1 = None
         self.f2 = None
         self.advance_i1()
         self.advance_i2()
-        self.comp = LevelComparisonResult(fam_history_1.analyzedLevel, 
+        self.comp = LevelComparisonResult(fam_history_1.analyzedLevel,
             fam_history_2.analyzedLevel)
 
     def run(self):
@@ -1055,13 +1055,20 @@ class LevelComparisonResult(object):
     def sort_key(item):
         if item.fam == 'n/a':
             return (MAXINT,)
-        return tuple((int(num) if num else alpha) for 
+        return tuple((int(num) if num else alpha) for
                     (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam))
 
     def __init__(self, lev1, lev2):
         self.fams = list()
         self.lev1 = lev1
         self.lev2 = lev2
+
+    def __str__(self):
+        fd = io.StringIO()
+        self.write(fd)
+        res = fd.getvalue()
+        fd.close()
+        return res
 
     def addFamily(self, famEvent):
         self.fams.append(famEvent)
@@ -1198,7 +1205,7 @@ if __name__ == "__main__":
     import sys
 
     parser = argparse.ArgumentParser(description='Analyze Hierarchical OrthoXML families.')
-    parser.add_argument('--xreftag', default=None, 
+    parser.add_argument('--xreftag', default=None,
                         help=("xref tag of genes to report. OrthoXML allows to "
                               "store multiple ids and xref annotations per gene "
                               "as attributes in the species section. If not set, "
@@ -1222,7 +1229,7 @@ if __name__ == "__main__":
                         help=("propagate taxonomy levels up to the toplevel. As an "
                               "illustration, consider a gene family in an eukaryotic "
                               "analysis that has only mammalian genes. Its topmost "
-                              "taxonomic level will therefor be 'Mammalia' and an " 
+                              "taxonomic level will therefor be 'Mammalia' and an "
                               "ancestral gene was gained at that level. However, if "
                               "'--propagete-top' is set, the family is assumed to have "
                               "already be present in the topmost taxonomic level, i.e. "
