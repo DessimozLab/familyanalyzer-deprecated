@@ -81,15 +81,17 @@ class OrthoXMLQuery(object):
     @classmethod
     def getInputGenes(cls, root, species=None):
         """returns a list of all gene elements in the orthoxml inside
-        <species><database> tags. Optionally filtered by species."""
+        <species><database> tags, i.e. the list of genes prior to running
+        OMA-HOGS. Optionally filtered by species."""
         filter_ = ('[@name="{}"]'.format(species) if species is not None else '')
         xquery = '//ns:orthoXML//ns:species{}//ns:database//ns:genes/ns:gene'.format(filter_)
         return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
 
     @classmethod
     def getGroupedGenes(cls, root, species=None):
-        """ returns a list of all geneRef elements inside <group> tags.
-        Optionally filtered by species"""
+        """ returns a list of all geneRef elements inside <group> tags, i.e.
+        the list of genes clustered into families after running OMA-HOGS.
+        Optionally filtered by species."""
         filter_ = ('[@name="TaxRange"and@value="{}"]'.format(species) if species is not None else '')
         xquery = '//ns:orthoXML//ns:groups//ns:orthologGroup//ns:property{}//following-sibling::ns:geneRef'.format(filter_)
         return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
