@@ -53,12 +53,12 @@ class OrthoXMLQuery(object):
         return root.findall(xquery)
 
     @classmethod
-    def getSubNodes(cls, targetNode, root, recursivly=True):
+    def getSubNodes(cls, targetNode, root, recursively=True):
         """method which returns a list of all (if recursively
         is set to true) or only the direct children nodes
         having 'targetNode' as their tagname.
         The namespace is automatically added to the tagname."""
-        xPrefix = ".//" if recursivly else "./"
+        xPrefix = ".//" if recursively else "./"
         xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
         return root.findall(xquery)
 
@@ -74,9 +74,25 @@ class OrthoXMLQuery(object):
         passed orthologGroup element. If the element does not have
         any TaxRange property tags associated, an empty list is
         returned."""
-        propTags = cls.getSubNodes("property", element, recursivly=False)
+        propTags = cls.getSubNodes("property", element, recursively=False)
         res = [t.get('value') for t in propTags if t.get('name') == 'TaxRange']
         return res
+
+    @classmethod
+    def getInputGenes(cls, root, species=None):
+        """returns a list of all gene elements in the orthoxml inside
+        <species><database> tags. Optionally filtered by species."""
+        filter_ = ('[@name="{}"]'.format(species) if species is not None else '')
+        xquery = '//ns:orthoXML//ns:species{}//ns:database//ns:genes/ns:gene'.format(filter_)
+        return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
+
+    @classmethod
+    def getGroupedGenes(cls, root, species=None):
+        """ returns a list of all geneRef elements inside <group> tags.
+        Optionally filtered by species"""
+        filter_ = ('[@name="TaxRange"and@value="{}"]'.format(species) if species is not None else '')
+        xquery = '//ns:orthoXML//ns:groups//ns:orthologGroup//ns:property{}//following-sibling::ns:geneRef'.format(filter_)
+        return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
 
 
 class OrthoXMLParser(object):
@@ -870,8 +886,11 @@ class FamHistory(object):
             elif summary.typ == 'MULTICOPY':
                 comp.addFamily(FamDupl(gfam.getFamId(),
                     '; '.join(summary.genes)))
+            elif summary.typ == 'ANCIENT_BUT_LOST':
+                comp.addFamily(FamLost(gfam.getFamId()))
             elif summary.typ == 'SINGLETON':
                 for g in summary.genes:
+                    xref = self.parser.mapGeneToXRef(g)
                     comp.addFamily(FamNovel(g))
 
         return comp
