@@ -84,7 +84,10 @@ class OrthoXMLQuery(object):
         <species><database> tags, i.e. the list of genes prior to running
         OMA-HOGS. Optionally filtered by species."""
         filter_ = ('[@name="{}"]'.format(species) if species is not None else '')
-        xquery = '//ns:orthoXML//ns:species{}//ns:database//ns:genes/ns:gene'.format(filter_)
+        if filter_ > '':
+            xquery = '/ns:orthoXML/ns:species{}/ns:database/ns:genes//ns:gene'.format(filter_)
+        else:
+            xquery = '//ns:gene'
         return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
 
     @classmethod
@@ -93,7 +96,10 @@ class OrthoXMLQuery(object):
         the list of genes clustered into families after running OMA-HOGS.
         Optionally filtered by species."""
         filter_ = ('[@name="TaxRange"and@value="{}"]'.format(species) if species is not None else '')
-        xquery = '//ns:orthoXML//ns:groups//ns:orthologGroup//ns:property{}//following-sibling::ns:geneRef'.format(filter_)
+        if filter_ > '':
+            xquery = '/ns:orthoXML/ns:groups/ns:orthologGroup//ns:property{}/following-sibling::ns:geneRef'.format(filter_)
+        else:
+            xquery = '//ns:geneRef'
         return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
 
 
@@ -110,9 +116,23 @@ class OrthoXMLParser(object):
 
         self._buildMappings()   # builds three dictionaries - see def below
 
-    def write(self, filename):
-        """Write out the (modified) orthoxml file into a new file."""
-        self.doc.write(filename)
+    def write(self, filename, **kwargs):
+        """Write out the (modified) orthoxml file into a new file.
+        kwargs include:
+            pretty_print=[True/False],
+            xml_declaration=[True/False]
+            encoding=[e.g. 'UTF-8']"""
+        if 'pretty_print' in kwargs:
+            self._remove_whitespace()
+        self.doc.write(filename, **kwargs)
+
+    def _remove_whitespace(self):
+        """Remove whitespace from text and tail fields so that lxml can
+        pretty_print the tree"""
+        for element in self.root.iter():
+            if element.text is not None and element.text.isspace():
+                element.text = None
+            element.tail = None
 
     def mapGeneToXRef(self, id_, typ='geneId'):
         """
@@ -346,6 +366,9 @@ class OrthoXMLParser(object):
         self.tax = tax
         GroupAnnotator(self).annotateMissingTaxRanges(tax, propagate_top)
 
+    def augmentSingletons(self):
+        GroupAnnotator(self).annotateSingletons()
+
 
 class TaxonomyInconsistencyError(Exception):
     pass
@@ -520,6 +543,8 @@ class TaxNode(object):
         self.name = name
         self.up = None
         self.down = list()
+        self.history = None
+        self.comparison = None
 
     def addChild(self, c):
         if not c in self.down:
@@ -556,6 +581,12 @@ class TaxNode(object):
         for elem in self.iterDescendents():
             if elem.isInner():
                 yield elem
+
+    def attachFamHistory(self, history):
+        self.history = history
+
+    def attachLevelComparisonResult(self, comparison):
+        self.comparison = comparison
 
 
 class GeneFamily(object):
@@ -879,7 +910,7 @@ class FamHistory(object):
         comp = LevelComparisonResult(self.analyzedLevel, leaf)
         for gfam in self.geneFamList:
             if gfam.getFamId() == 'n/a':
-                continue # skip singletons (NB - discuss this w/Adrian)
+                continue # skip singletons
             summary = gfam.summary.get(leaf, SummaryOfSpecies("LOSS", list()))
             if summary.typ == 'LOSS':
                 comp.addFamily(FamLost(gfam.getFamId()))
@@ -1046,6 +1077,12 @@ class FamNovel(FamEvent):
 
 class FamLost(FamEvent):
     event = "lost"
+
+
+class FamSingleton(FamEvent):
+    """A single-member 'family' consisting of a gene that doesn't
+    match any other family. Only occurs in a leaf."""
+    event = "singleton"
 
 
 class FamDupl(FamEvent):
@@ -1220,6 +1257,29 @@ class GroupAnnotator(object):
             self.dupCnt = list()
             self._annotateGroupR(fam, fam.get('id', str(i)))
 
+    def annotateSingletons(self):
+        """Any input genes that aren't assigned to ortholog groups are
+        singletons, which are added to the xml as extra ortholog groups"""
+        highest_group = max(self.parser.getToplevelGroups(),
+                            key=lambda x: int(x.get('id')))
+        input_genes = set(n.get('id') for n in
+                          OrthoXMLQuery.getInputGenes(self.parser.root))
+        grouped_genes = set(n.get('id') for n in
+                            OrthoXMLQuery.getGroupedGenes(self.parser.root))
+        singletons = input_genes - grouped_genes
+        groups_node = OrthoXMLQuery.getSubNodes('groups', self.parser.root)[0]
+
+        fam_num = int(highest_group.get('id')) + 1
+        for gene in singletons:
+            species = self.parser.mapGeneToSpecies(gene)
+            new_node = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns),
+                                    id=str(fam_num))
+            new_node.append(self._createTaxRangeTag(species))
+            new_node.append(etree.Element('{{{ns0}}}geneRef'.format(**self.parser.ns),
+                            id=gene))
+            groups_node.append(new_node)
+            fam_num += 1
+
 
 if __name__ == "__main__":
     import argparse
@@ -1264,6 +1324,12 @@ if __name__ == "__main__":
                               "annotations include for example the additional "
                               "taxonomic levels of orthologGroup and unique HOG "
                               "IDs."))
+    parser.add_argument('--add_singletons', action='store_true',
+                        help=("Take singletons - genes from the input set that "
+                              "weren't assigned to orthologous groups and "
+                              "appear as novel gains in the taxonomy leaves - "
+                              "and add them to the xml as single-member "
+                              "orthologGroups"))
     parser.add_argument('--compare_second_level', default=None,
                         help=("Compare secondary level with primary one, i.e. "
                               "report what happend between the secondary and primary "
@@ -1303,6 +1369,9 @@ if __name__ == "__main__":
 
     # add taxonomy to parser
     op.augmentTaxonomyInfo(tax, args.propagate_top)
+
+    if args.add_singletons:
+        op.augmentSingletons()
 
     if args.use_recursion:
         hist = op.getFamHistoryByRecursion(args.species, args.level)

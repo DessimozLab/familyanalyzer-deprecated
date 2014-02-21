@@ -200,3 +200,60 @@ class TaxonomyFactoryTest(unittest.TestCase):
         tax = fa.TaxonomyFactory.newTaxonomy(p)
         expectedLevels = p.getLevels().union(p.getSpeciesSet())
         self.assertSetEqual(set(tax.hierarchy.keys()), expectedLevels)
+
+
+class GeneQueryTest(unittest.TestCase):
+    def setUp(self):
+        self._op = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        self._tax = fa.TaxonomyFactory.newTaxonomy(self._op)
+        self._op.augmentTaxonomyInfo(self._tax)
+        self._input_query = fa.OrthoXMLQuery.getInputGenes
+        self._grouped_query = fa.OrthoXMLQuery.getGroupedGenes
+
+    def test_all_input_genes(self):
+        expected_ids = {'1',  '2',  '3',  '5',  '11', '12', '13', '14',
+                        '21', '22', '23', '31', '32', '33', '34', '41',
+                        '43', '51', '53'}
+
+        result_nodes = self._input_query(self._op.root)
+        result_ids = {n.get('id') for n in result_nodes}
+        self.assertEqual(result_ids, expected_ids)
+
+    def test_filtered_input_genes(self):
+        filters = ['HUMAN', 'PANTR', 'CANFA', 'MOUSE', 'RATNO', 'XENTR']
+        expected_ids = dict(HUMAN={'1',  '2',  '3',  '5'},
+                            PANTR={'11', '12', '13', '14'},
+                            CANFA={'21', '22', '23'},
+                            MOUSE={'31', '32', '33', '34'},
+                            RATNO={'41', '43'},
+                            XENTR={'51', '53'})
+
+        for filter_ in filters:
+            result_nodes = self._input_query(self._op.root, filter_)
+            result_ids = {n.get('id') for n in result_nodes}
+            self.assertEqual(result_ids, expected_ids[filter_],
+                             'failed with {}'.format(filter_))
+
+    def test_all_grouped_genes(self):
+        expected_ids = {'1',  '2',  '3',  '11', '12', '13',
+                        '14', '21', '22', '23', '31', '32',
+                        '33', '34', '41', '51', '53'}
+
+        result_nodes = self._grouped_query(self._op.root)
+        result_ids = {n.get('id') for n in result_nodes}
+        self.assertEqual(result_ids, expected_ids)
+
+    def test_filtered_grouped_genes(self):
+        filters = ['HUMAN', 'PANTR', 'CANFA', 'MOUSE', 'RATNO', 'XENTR']
+        expected_ids = dict(HUMAN={'1',  '2',  '3'},
+                            PANTR={'11', '12', '13', '14'},
+                            CANFA={'21', '22', '23'},
+                            MOUSE={'31', '32', '33', '34'},
+                            RATNO={'41'},
+                            XENTR={'51', '53'})
+
+        for filter_ in filters:
+            result_nodes = self._grouped_query(self._op.root, filter_)
+            result_ids = {n.get('id') for n in result_nodes}
+            self.assertEqual(result_ids, expected_ids[filter_],
+                             'failed with {}'.format(filter_))
