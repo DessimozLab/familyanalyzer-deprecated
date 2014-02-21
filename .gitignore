@@ -6,3 +6,4 @@ familyanalyzer.egg-info
 test/test_comparisongraph.py
 test/simpleExAugmented.orthoxml
 makefile
+.ropeproject
