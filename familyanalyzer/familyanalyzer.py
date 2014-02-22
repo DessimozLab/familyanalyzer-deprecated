@@ -137,6 +137,7 @@ class OrthoXMLParser(object):
         self.doc = etree.parse(filename)
         self.root = self.doc.getroot()
         self.tax = None
+        self.singletons = None
 
         self._buildMappings()   # builds three dictionaries - see def below
 
@@ -736,8 +737,12 @@ class LevelAnalysisFactory(object):
         the presents/absence of a taxonomy in the parser"""
         if parser.tax is None:
             return BasicLevelAnalysis(parser)
-        else:
+        elif parser.singletons is None:
             return TaxAwareLevelAnalysis(parser, parser.tax)
+        else:
+            return SingletonAwareLevelAnalysis(parser,
+                                               parser.tax,
+                                               parser.singletons)
 
 
 class BasicLevelAnalysis(object):
@@ -778,6 +783,20 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         super().__init__(parser)
         self.tax = tax
 
+    def addLosses(self, fam, summary):
+        lev = fam.getLevels()
+        if lev is not None:
+            # if several levels exist at this node, use oldest one
+            mostGeneralLevel = self.tax.mostGeneralLevel(lev)
+            speciesCoveredByLevel = {
+                l.name for l in
+                self.tax.hierarchy[mostGeneralLevel].iterLeaves()
+            }
+
+            lostSpecies = speciesCoveredByLevel.difference(summary.keys())
+            for lost in lostSpecies:
+                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
+
     def analyzeGeneFam(self, fam):
         """analyzes a single gene family in the context of a known
         taxonomic tree.
@@ -788,18 +807,42 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         the family contains a copy of the gene. if not, it had
         been lost."""
         summary = super().analyzeGeneFam(fam)
-        lev = fam.getLevels()
-        if lev is not None:
-            # if several levels exist at this node, use oldest one
-            mostGeneralLevel = self.tax.mostGeneralLevel(lev)
-            speciesCoveredByLevel = {l.name for l in
-                                     self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
-            print(fam.getFamId(), speciesCoveredByLevel)
-            lostSpecies = speciesCoveredByLevel.difference(summary.keys())
-            for lost in lostSpecies:
-                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
+        self.addLosses(fam, summary)
         return summary
 
+
+class SingletonAwareLevelAnalysis(TaxAwareLevelAnalysis):
+    def __init__(self, parser, tax, singletons):
+        super().__init__(parser, tax)
+        self.singletons = singletons
+
+    def analyzeGeneFam(self, fam):
+        """analyzes a single gene family and returns a summary dict.
+
+        This method classifies all genes in the family depending on
+        the number of copies per genome into MULTICOPY or SINGLECOPY
+        genes."""
+
+        spec2genes = collections.defaultdict(set)
+        for geneId in fam.getMemberGenes():
+            spec = self.parser.mapGeneToSpecies(geneId)
+            spec2genes[spec].add(geneId)
+        summary = dict()
+        for spec in iter(spec2genes.keys()):
+            nrMemb = len(spec2genes[spec])
+            if nrMemb > 1:
+                gclass = self.GeneClasses.MULTICOPY
+            else:
+                if fam.getFamId() in self.parser.singletons:
+                    gclass = self.GeneClasses.SINGLETON
+                else:
+                    gclass = self.GeneClasses.SINGLECOPY
+
+            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
+                                             spec2genes[spec])
+
+        self.addLosses(fam, summary)
+        return summary
 
 class FamHistory(object):
     XRefTag = None
@@ -807,6 +850,9 @@ class FamHistory(object):
     def __init__(self, parser, analyzer):
         self.parser = parser
         self.analyzer = analyzer
+
+    def __len__(self):
+        return (len(self.geneFamList) if hasattr(self, 'geneFamList') else 0)
 
     def setXRefTag(self, tag):
         """set the attribute name of the 'gene' elements which should
@@ -1261,11 +1307,13 @@ class GroupAnnotator(object):
         groups_node = OrthoXMLQuery.getSubNodes('groups', self.parser.root)[0]
 
         fam_num = int(highest_group.get('id')) + 1
+        singleton_families = set()
 
         if PROGRESSBAR:
             pbar.maxval = len(singletons)
 
         for i, gene in enumerate(singletons, start=1):
+            singleton_families.add(str(fam_num))
             species = self.parser.mapGeneToSpecies(gene)
             new_node = etree.Element('{{{ns0}}}orthologGroup'.format(
                                                             **self.parser.ns),
@@ -1279,6 +1327,7 @@ class GroupAnnotator(object):
             if PROGRESSBAR:
                 pbar.update(i)
 
+        self.parser.singletons = singleton_families
         if PROGRESSBAR:
             pbar.finish()
 
