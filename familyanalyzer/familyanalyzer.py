@@ -1057,10 +1057,18 @@ class Comparer(object):
 
     def novel(self):
         while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
-            self.comp.addFamily(FamNovel(self.f2.getFamId()))
+            _Event = (FamSingleton if self._singleton_check(self.f2)
+                      else FamNovel) # this check is probably redundant
+                                     # because there shouldn't be any
+                                     # singletons if l1 is not exhausted
+                                     # (singletons are always annotated last)
+            self.comp.addFamily(_Event(self.f2.getFamId()))
             self.advance_i2()
             if self.f2 is None:
                 break
+
+    def _singleton_check(self, fam):
+        return 'SINGLETON' in {x.typ for x in fam.summary.values()}
 
     def advance_i1(self):
         try:
@@ -1078,8 +1086,9 @@ class Comparer(object):
 
     def l1_exhausted(self):
         while self.f2 is not None:
-            # family_type = F
-            self.comp.addFamily(FamNovel(self.f2.getFamId()))
+            _Event = (FamSingleton if self._singleton_check(self.f2)
+                      else FamNovel)
+            self.comp.addFamily(_Event(self.f2.getFamId()))
             self.advance_i2()
 
     def l2_exhausted(self):
