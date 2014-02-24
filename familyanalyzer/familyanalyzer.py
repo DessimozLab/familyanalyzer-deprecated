@@ -60,7 +60,8 @@ class OrthoXMLQuery(object):
         xquery = ".*//{{{}}}gene[@id='{}']".format(cls.ns['ns0'], id_)
         genes = root.findall(xquery)
         if len(genes) > 1:
-            raise ElementError('several gene nodes with id {} exist'.format(id_))
+            raise ElementError('several gene nodes with id {} '
+                               'exist'.format(id_))
         gene = genes[0] if len(genes)>0 else None
         return gene
 
@@ -366,38 +367,53 @@ class Taxonomy(object):
 
     def _countParentAmongLevelSet(self, levels):
         """helper method to count for each level how many levels
-        are parent levels. e.g. (arrow: is-partent-of)
+        are parent levels. e.g. (arrow: is-parent-of)
           A->B->C
               \>D->E
         will return A=0,B=1,C=2,D=2,E=3"""
         levelSet = set(levels)
-        cnts = dict()
+        counts = dict()
         for lev in levelSet:
             t = set(self.iterParents(lev)).intersection(levelSet)
-            cnts[lev] = len(t)
-        return cnts
+            counts[lev] = len(t)
+        return counts
 
     def mostSpecific(self, levels):
         """returns the most specific (youngest) level among a set of
         levels. it is required that all levels are on one monophyletic
         lineage, otherwise an Exception is raised."""
-        # count who often each element is a child of any other one.
+        # count how often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
-        cnts = self._countParentAmongLevelSet(levels)
-        for lev, cnt in cnts.items():
-            if cnt == len(levels)-1:
+        counts = self._countParentAmongLevelSet(levels)
+        for lev, count in counts.items():
+            if count == len(levels)-1:
                 return lev
         raise Exception("Non of the element is subelement of all others")
 
     def mostGeneralLevel(self, levels):
-        """returns the most general (odest) level among a set of levels."""
+        """returns the most general (oldest) level among a set of levels."""
         # count who often each element is a child of any other one.
         # the one with len(levels)-1 is the most specific level
-        cnts = self._countParentAmongLevelSet(levels)
-        for lev, cnt in cnts.items():
-            if cnt == 0:
+        counts = self._countParentAmongLevelSet(levels)
+        for lev, count in counts.items():
+            if count == 0:
                 return lev
         raise Exception("Non of the element is the root of all others")
+
+    def younger_than_filter(self, levels, oldest_permitted):
+        """
+        Filters a set of levels, removing any that are older than the
+        oldest_permitted (oldest_permitted=string: node_name)
+        """
+        try:
+            oldest_permitted_node = self.hierarchy[oldest_permitted]
+        except KeyError:
+            raise Exception('No node with name {} found in '
+                            'Taxonomy'.format(oldest_permitted))
+        permitted = [node.name
+                     for node in oldest_permitted_node.iterDescendents()]
+
+        return [lev for lev in levels if lev in permitted]
 
     def printSubTreeR(self, fd, lev=None, indent=0):
         if lev is None:
@@ -416,7 +432,7 @@ class Taxonomy(object):
 
         for i, level in enumerate(self.hierarchy, start=1):
             history = parser.getFamHistory()
-            history.analyzeLevelFast(level)
+            history.analyzeLevel(level)
             histories[level] = history
             self.hierarchy[level].attachFamHistory(history)
             if PROGRESSBAR:
@@ -442,9 +458,11 @@ class Taxonomy(object):
             pbar.start()
 
         for i, (parent, child) in enumerate(to_compare, start=1):
-            comp = self.histories[parent.name].compare(self.histories[child.name])
-            comparisons[(parent.name, child.name)] = comp
-            child.attachLevelComparisonResult(comp)
+            parent_history = self.histories[parent.name]
+            child_history = self.histories[child.name]
+            parent_child_comparison = parent_history.compare(child_history)
+            comparisons[(parent.name, child.name)] = parent_child_comparison
+            child.attachLevelComparisonResult(parent_child_comparison)
             if PROGRESSBAR:
                 pbar.update(i)
 
@@ -667,12 +685,12 @@ class GeneFamily(object):
         subFams = [GeneFamily(fam) for fam in subFamNodes]
         return subFams
 
-    def analyze(self, strategy):
+    def analyze(self, strategy, level):
         """analyze the history of the GeneFamily using the strategy
         passed to the method. The strategy arguement must be an
         object providing a analyzeGeneFam method,
         e.g. a LevelAnalysis object."""
-        self.summary = strategy.analyzeGeneFam(self)
+        self.summary = strategy.analyzeGeneFam(self, level)
 
     def write(self, fd, speciesFilter=None, idFormatter=lambda x: x):
         species = list(self.summary.keys())
@@ -755,7 +773,7 @@ class BasicLevelAnalysis(object):
     def __init__(self, parser):
         self.parser = parser
 
-    def analyzeGeneFam(self, fam):
+    def analyzeGeneFam(self, fam, level=None):
         """analyzes a single gene family and returns a summary dict.
 
         This method classifies all genes in the family depending on
@@ -783,10 +801,12 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         super().__init__(parser)
         self.tax = tax
 
-    def addLosses(self, fam, summary):
+    def addLosses(self, fam, summary, level):
         lev = fam.getLevels()
         if lev is not None:
             # if several levels exist at this node, use oldest one
+            # that is not older than `level'
+            lev = self.tax.younger_than_filter(lev, level)
             mostGeneralLevel = self.tax.mostGeneralLevel(lev)
             speciesCoveredByLevel = {
                 l.name for l in
@@ -797,7 +817,7 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
             for lost in lostSpecies:
                 summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
 
-    def analyzeGeneFam(self, fam):
+    def analyzeGeneFam(self, fam, level):
         """analyzes a single gene family in the context of a known
         taxonomic tree.
 
@@ -806,8 +826,8 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         checking whether a species within the taxonomic range of
         the family contains a copy of the gene. if not, it had
         been lost."""
-        summary = super().analyzeGeneFam(fam)
-        self.addLosses(fam, summary)
+        summary = super().analyzeGeneFam(fam, level)
+        self.addLosses(fam, summary, level)
         return summary
 
 
@@ -816,7 +836,7 @@ class SingletonAwareLevelAnalysis(TaxAwareLevelAnalysis):
         super().__init__(parser, tax)
         self.singletons = singletons
 
-    def analyzeGeneFam(self, fam):
+    def analyzeGeneFam(self, fam, level):
         """analyzes a single gene family and returns a summary dict.
 
         This method classifies all genes in the family depending on
@@ -841,7 +861,7 @@ class SingletonAwareLevelAnalysis(TaxAwareLevelAnalysis):
             summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
                                              spec2genes[spec])
 
-        self.addLosses(fam, summary)
+        self.addLosses(fam, summary, level)
         return summary
 
 class FamHistory(object):
@@ -860,42 +880,42 @@ class FamHistory(object):
         'protId'. If not defined, the (numerical) internal ids are used."""
         self.XRefTag = tag
 
-    def analyzeLevelFast(self, level):
+    def analyzeLevel(self, level):
         subFamNodes = OrthoXMLQuery.getGroupsAtLevel(level, self.parser.root)
         gfamList = [GeneFamily(fam) for fam in subFamNodes]
 
         for gfam in gfamList:
-            gfam.analyze(self.analyzer)
+            gfam.analyze(self.analyzer, level)
 
         self.geneFamList = gfamList
         self.analyzedLevel = level
 
-    def analyzeLevel(self, level):
-        gfamList = list()
-        for fam in self.parser.getToplevelGroups():
-            gfamList.extend(GeneFamily(fam).analyzeLevel(level))
+    # def analyzeLevel(self, level):
+    #     gfamList = list()
+    #     for fam in self.parser.getToplevelGroups():
+    #         gfamList.extend(GeneFamily(fam).analyzeLevel(level))
 
-        gene2FamIdx = dict()
-        specInTaxRange = set()
-        for idx, gfam in enumerate(gfamList):
-            gfam.analyze(self.analyzer)
-            specInTaxRange.update(gfam.summary.keys())
-            for mem in gfam.getMemberGenes():
-                gene2FamIdx[mem] = idx
-        # get genes in taxrange not belonging to any family. those are
-        # considered to be singletons and added to a special GeneFamily.
-        allGenesInRange = self.parser.getGeneIds(speciesFilter=specInTaxRange)
-        singletonsSet = set(allGenesInRange).difference(gene2FamIdx.keys())
-        singletons = Singletons(singletonsSet)
-        singletons.analyze(self.analyzer)
+    #     gene2FamIdx = dict()
+    #     specInTaxRange = set()
+    #     for idx, gfam in enumerate(gfamList):
+    #         gfam.analyze(self.analyzer)
+    #         specInTaxRange.update(gfam.summary.keys())
+    #         for mem in gfam.getMemberGenes():
+    #             gene2FamIdx[mem] = idx
+    #     # get genes in taxrange not belonging to any family. those are
+    #     # considered to be singletons and added to a special GeneFamily.
+    #     allGenesInRange = self.parser.getGeneIds(speciesFilter=specInTaxRange)
+    #     singletonsSet = set(allGenesInRange).difference(gene2FamIdx.keys())
+    #     singletons = Singletons(singletonsSet)
+    #     singletons.analyze(self.analyzer)
 
-        gfamList.append(singletons)
-        for singleton in singletonsSet:
-            gene2FamIdx[singleton] = len(gfamList)-1
+    #     gfamList.append(singletons)
+    #     for singleton in singletonsSet:
+    #         gene2FamIdx[singleton] = len(gfamList)-1
 
-        self.geneFamList = gfamList
-        self.gene2FamIdx = gene2FamIdx
-        self.analyzedLevel = level
+    #     self.geneFamList = gfamList
+    #     self.gene2FamIdx = gene2FamIdx
+    #     self.analyzedLevel = level
 
     def write(self, fd, speciesFilter=None):
         """writes the FamHistory object to a given stream object
@@ -1058,6 +1078,7 @@ class Comparer(object):
 
     def l1_exhausted(self):
         while self.f2 is not None:
+            # family_type = F
             self.comp.addFamily(FamNovel(self.f2.getFamId()))
             self.advance_i2()
 

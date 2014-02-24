@@ -203,6 +203,10 @@ class TaxonomyFactoryTest(unittest.TestCase):
 
 
 class GeneQueryTest(unittest.TestCase):
+    """ tests the OrthoXMLQuery methods getInputGenes and getGroupedGenes,
+    with and without species filters
+    """
+
     def setUp(self):
         self._op = SetupHelper.createOrthoXMLParserFromSimpleEx()
         self._tax = fa.TaxonomyFactory.newTaxonomy(self._op)
