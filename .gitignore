@@ -3,3 +3,7 @@ dist
 */__pycache__
 familyanalyzer.egg-info
 *.pyc
+test/test_comparisongraph.py
+test/simpleExAugmented.orthoxml
+makefile
+.ropeproject

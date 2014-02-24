@@ -6,6 +6,24 @@ import os
 from familyanalyzer import TaxNode, Taxonomy, enum
 
 
+class LexError(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
+
+
+class ParseError(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
+
+
 class Streamer(object):
 
     """ Wraps an io.StringIO and iterates a byte at a time,
@@ -14,7 +32,7 @@ class Streamer(object):
     def __init__(self, stream):
         """ _peek always looks ahead 1 position """
         if isinstance(stream, str):
-            stream = StringIO(stream)
+            stream = io.StringIO(stream)
         self.stream = stream
         self._peek = self.stream.read(1)
 
@@ -280,13 +298,13 @@ class NewickTaxonomy(Taxonomy):
         not. """
         label = next(self.lexer)
         if label.typ not in (tokens.LABEL, tokens.SUPPORT):
-            raise Exception(
+            raise ParseError(
                 'Expected a label or a support value, found {0}'.format(
                     label))
 
         length = next(self.lexer)
         if length.typ != tokens.LENGTH:
-            raise Exception('Expected a length, found {0}'.format(
+            raise ParseError('Expected a length, found {0}'.format(
                 length))
 
         return (label.val if label.typ == tokens.LABEL else None)
@@ -388,7 +406,7 @@ class NewickTaxonomy(Taxonomy):
                 return
 
             elif token.typ in (tokens.LABEL, tokens.LENGTH, tokens.SUPPORT):
-                raise Exception('Unexpected token in stream: {0}'.format(token))
+                raise ParseError('Unexpected token in stream: {0}'.format(token))
 
             else:
-                raise Exception('Not sure what happened')
+                raise ParseError('Not sure what happened')
