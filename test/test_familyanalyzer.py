@@ -1,6 +1,7 @@
 import unittest
 import familyanalyzer as fa
-
+fa.PROGRESSBAR = False
+fa.familyanalyzer.PROGRESSBAR = False
 
 class SetupHelper(object):
     @staticmethod
@@ -261,3 +262,57 @@ class GeneQueryTest(unittest.TestCase):
             result_ids = {n.get('id') for n in result_nodes}
             self.assertEqual(result_ids, expected_ids[filter_],
                              'failed with {}'.format(filter_))
+
+
+class TaxonomyNewickTest(unittest.TestCase):
+    """Tests that the Taxonomy can write itself as newick """
+
+    def setUp(self):
+        self._op = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        self._tax = fa.TaxonomyFactory.newTaxonomy(self._op)
+
+    def test_newick(self):
+        equivalent_trees = {
+            ('((((RATNO, MOUSE)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+            ('((((MOUSE, RATNO)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+            ('((((RATNO, MOUSE)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+            ('((((MOUSE, RATNO)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+
+            ('((CANFA, ((RATNO, MOUSE)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+            ('((CANFA, ((MOUSE, RATNO)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+            ('((CANFA, ((RATNO, MOUSE)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+            ('((CANFA, ((MOUSE, RATNO)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+
+            ('(XENTR, (((RATNO, MOUSE)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+            ('(XENTR, (((MOUSE, RATNO)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+            ('(XENTR, (((RATNO, MOUSE)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+            ('(XENTR, (((MOUSE, RATNO)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+
+            ('(XENTR, (CANFA, ((RATNO, MOUSE)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires)Mammalia)Vertebrata;'),
+            ('(XENTR, (CANFA, ((MOUSE, RATNO)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires)Mammalia)Vertebrata;'),
+            ('(XENTR, (CANFA, ((RATNO, MOUSE)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires)Mammalia)Vertebrata;'),
+            ('(XENTR, (CANFA, ((MOUSE, RATNO)Rodens, (HUMAN, PANTR)Primates)Euarchontoglires)Mammalia)Vertebrata;'),
+
+            ('((((PANTR, HUMAN)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+            ('((((PANTR, HUMAN)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+            ('((((HUMAN, PANTR)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+            ('((((HUMAN, PANTR)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
+
+            ('((CANFA, ((PANTR, HUMAN)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+            ('((CANFA, ((PANTR, HUMAN)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+            ('((CANFA, ((HUMAN, PANTR)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+            ('((CANFA, ((HUMAN, PANTR)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires)Mammalia, XENTR)Vertebrata;'),
+
+            ('(XENTR, (((PANTR, HUMAN)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+            ('(XENTR, (((PANTR, HUMAN)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+            ('(XENTR, (((HUMAN, PANTR)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+            ('(XENTR, (((HUMAN, PANTR)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires, CANFA)Mammalia)Vertebrata;'),
+
+            ('(XENTR, (CANFA, ((PANTR, HUMAN)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires)Mammalia)Vertebrata;'),
+            ('(XENTR, (CANFA, ((PANTR, HUMAN)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires)Mammalia)Vertebrata;'),
+            ('(XENTR, (CANFA, ((HUMAN, PANTR)Primates, (RATNO, MOUSE)Rodens)Euarchontoglires)Mammalia)Vertebrata;'),
+            ('(XENTR, (CANFA, ((HUMAN, PANTR)Primates, (MOUSE, RATNO)Rodens)Euarchontoglires)Mammalia)Vertebrata;'),
+        }
+
+        result = self._tax.newick()
+        self.assertIn(result, ' '.join(equivalent_trees))

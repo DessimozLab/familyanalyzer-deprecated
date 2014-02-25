@@ -365,6 +365,10 @@ class Taxonomy(object):
             tn = tn.up
             yield tn.name
 
+    def is_ancestor_of(self, anc, desc):
+        """ Returns True if `anc' is an ancestor of `desc'"""
+        return anc in self.iterParents(desc)
+
     def _countParentAmongLevelSet(self, levels):
         """helper method to count for each level how many levels
         are parent levels. e.g. (arrow: is-parent-of)
@@ -895,6 +899,13 @@ class FamHistory(object):
     def __len__(self):
         return self.get_number_of_fams(singletons=True)
 
+    def __getitem__(self, key):
+        return self.geneFamDict[key]
+
+    @property
+    def geneFamList(self):
+        return sorted(self.geneFamDict.values())
+
     def setXRefTag(self, tag):
         """set the attribute name of the 'gene' elements which should
         be used for report. defined by orthoxml are 'geneId' and
@@ -908,7 +919,7 @@ class FamHistory(object):
         for gfam in gfamList:
             gfam.analyze(self.analyzer, level)
 
-        self.geneFamList = gfamList
+        self.geneFamDict = {gf.getFamId(): gf for gf in gfamList}
         self.analyzedLevel = level
 
     def write(self, fd, speciesFilter=None):
@@ -1143,7 +1154,7 @@ class LevelComparisonResult(object):
                     (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam))
 
     def __init__(self, lev1, lev2):
-        self.fams = list()
+        self.fams_dict = dict()
         self.lev1 = lev1
         self.lev2 = lev2
 
@@ -1154,13 +1165,19 @@ class LevelComparisonResult(object):
         fd.close()
         return res
 
+    def __getitem__(self, key):
+        return self.fams_dict[key]
+
+    @property
+    def fams(self):
+        return sorted(self.fams_dict.values(), key=self.sort_key)
+
     def addFamily(self, famEvent):
-        self.fams.append(famEvent)
+        self.fams_dict[famEvent.fam] = famEvent
 
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
                  format(self.lev1, self.lev2))
-        self.fams.sort(key=self.sort_key)
         for fam in self.fams:
             fd.writelines(str(fam))
 
@@ -1343,6 +1360,44 @@ class GroupAnnotator(object):
         self.parser.singletons = singleton_families
         if PROGRESSBAR:
             pbar.finish()
+
+
+class TwoLevelComparisonInterpreter(object):
+
+    def __init__(self):
+        self.counts = {'identical': 0,
+                       'novel': 0,
+                       'lost': 0,
+                       'duplicated': 0,
+                       'singletons': 0}
+
+    def interpret(self, comparison):
+        for family in comparison.fams:
+            if family.event in ['identical', 'lost', 'singleton', 'novel']:
+                self.counts[family.event] += 1
+            elif family.event == 'duplicated':
+                self.counts['duplicated'] += len(family.into.split('; '))
+
+
+class ThreeLevelComparisonInterpreter(object):
+
+    def __init__(self):
+        self.counts = {'identical-identical': 0,
+                       'identical-duplicated': 0,
+                       'identical-lost': 0,
+                       'duplicated-identical': 0,
+                       'duplicated-duplicated': 0,
+                       'duplicated-lost': 0,
+                       'novel-identical': 0,
+                       'novel-duplicated': 0,
+                       'novel-lost': 0,
+                       'missing-novel': 0,
+                       'missing-singleton': 0,
+                       'lost': 0}
+
+    def interpret(self, comparison1, comparison2):
+        pass
+
 
 
 if __name__ == "__main__":
