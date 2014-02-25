@@ -705,6 +705,11 @@ class GeneFamily(object):
                 self.getFamId(), spec, len(sumElem.genes),
                 sumElem.typ, refs))
 
+    def is_singleton(self):
+        if not hasattr(self, 'summary'):
+            return False
+        return 'SINGLETON' in {x.typ for x in self.summary.values()}
+
 
 class Singletons(GeneFamily):
     def __init__(self, element):
@@ -873,7 +878,7 @@ class FamHistory(object):
         self.analyzer = analyzer
 
     def __len__(self):
-        return (len(self.geneFamList) if hasattr(self, 'geneFamList') else 0)
+        return self.get_number_of_fams(singletons=True)
 
     def setXRefTag(self, tag):
         """set the attribute name of the 'gene' elements which should
@@ -890,33 +895,6 @@ class FamHistory(object):
 
         self.geneFamList = gfamList
         self.analyzedLevel = level
-
-    # def analyzeLevel(self, level):
-    #     gfamList = list()
-    #     for fam in self.parser.getToplevelGroups():
-    #         gfamList.extend(GeneFamily(fam).analyzeLevel(level))
-
-    #     gene2FamIdx = dict()
-    #     specInTaxRange = set()
-    #     for idx, gfam in enumerate(gfamList):
-    #         gfam.analyze(self.analyzer)
-    #         specInTaxRange.update(gfam.summary.keys())
-    #         for mem in gfam.getMemberGenes():
-    #             gene2FamIdx[mem] = idx
-    #     # get genes in taxrange not belonging to any family. those are
-    #     # considered to be singletons and added to a special GeneFamily.
-    #     allGenesInRange = self.parser.getGeneIds(speciesFilter=specInTaxRange)
-    #     singletonsSet = set(allGenesInRange).difference(gene2FamIdx.keys())
-    #     singletons = Singletons(singletonsSet)
-    #     singletons.analyze(self.analyzer)
-
-    #     gfamList.append(singletons)
-    #     for singleton in singletonsSet:
-    #         gene2FamIdx[singleton] = len(gfamList)-1
-
-    #     self.geneFamList = gfamList
-    #     self.gene2FamIdx = gene2FamIdx
-    #     self.analyzedLevel = level
 
     def write(self, fd, speciesFilter=None):
         """writes the FamHistory object to a given stream object
@@ -945,6 +923,13 @@ class FamHistory(object):
         c = Comparer(self, other)
         c.run()
         return c.comp
+
+    def get_number_of_fams(self, singletons=False):
+        if not hasattr(self, 'geneFamList'):
+            return 0
+        if singletons:
+            return len(self.geneFamList)
+        return len([x for x in self.geneFamList if not x.is_singleton()])
 
 
 class Comparer(object):
@@ -1043,7 +1028,7 @@ class Comparer(object):
 
     def novel(self):
         while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
-            _Event = (FamSingleton if self._singleton_check(self.f2)
+            _Event = (FamSingleton if self.f2.is_singleton()
                       else FamNovel) # this check is probably redundant
                                      # because there shouldn't be any
                                      # singletons if l1 is not exhausted
@@ -1052,9 +1037,6 @@ class Comparer(object):
             self.advance_i2()
             if self.f2 is None:
                 break
-
-    def _singleton_check(self, fam):
-        return 'SINGLETON' in {x.typ for x in fam.summary.values()}
 
     def advance_i1(self):
         try:
@@ -1072,7 +1054,7 @@ class Comparer(object):
 
     def l1_exhausted(self):
         while self.f2 is not None:
-            _Event = (FamSingleton if self._singleton_check(self.f2)
+            _Event = (FamSingleton if self.f2.is_singleton()
                       else FamNovel)
             self.comp.addFamily(_Event(self.f2.getFamId()))
             self.advance_i2()
