@@ -864,6 +864,7 @@ class SingletonAwareLevelAnalysis(TaxAwareLevelAnalysis):
         self.addLosses(fam, summary, level)
         return summary
 
+
 class FamHistory(object):
     XRefTag = None
 
@@ -936,21 +937,6 @@ class FamHistory(object):
         res = fd.getvalue()
         fd.close()
         return res
-
-    def _find_subfamilies(self, query, targetlist):
-        """ Used in compare method - fixes s.startswith bug where
-        queries such as '20' would return subfamilies '200', '2000', etc.
-        Now '20' will only return subfamilies of the form '20.1a', 20.1b.2c.3e',
-        etc. """
-        result = []
-        q = query.split('.')   # e.g. 8.1b.2a -> ['8', '1b', '2a']
-
-        for family in targetlist:
-            name_elements = family.split('.')
-            if name_elements[:len(q)] == q:  # exact prefix match to query
-                result.append(family)
-
-        return result
 
     def compare(self, other):
         """ compares two FamilyHistory objects in linear time
