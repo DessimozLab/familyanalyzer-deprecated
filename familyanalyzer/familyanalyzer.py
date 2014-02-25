@@ -588,10 +588,42 @@ class TaxNode(object):
             label = '"{}"'.format(self.name)
         else:
             label = self.name
+
+        NHX = self._get_node_NHX() + self._get_edge_NHX()
         if self.isLeaf():
-            return label
+            return '{0}{1}'.format(label,
+                            ('[&&NHX{0}]'.format(NHX) if NHX > '' else ''))
         subtree = ', '.join(str(ch) for ch in self.down)
-        return '({0}){1}'.format(subtree, label)
+        return '({0}){1}{2}'.format(subtree, label,
+                            ('[&&NHX{0}]'.format(NHX) if NHX > '' else ''))
+
+    def _get_node_NHX(self):
+        return (':Genes={}'.format(len(self.history))
+                if self.history else '')
+
+    def _get_edge_NHX(self):
+        if self.comparison:
+            if not hasattr(self.comparison, 'summary'):
+                self.comparison.summarise()
+
+            n_ident     = self.comparison.summary['identical']
+            n_dupl      = self.comparison.summary['duplicated']
+            n_lost      = self.comparison.summary['lost']
+            n_novel     = self.comparison.summary['novel']
+            n_singleton = self.comparison.summary['singleton']
+
+            NHX = (':Identical={0}'
+                   ':Duplicated={1}'
+                   ':Lost={2}'.format(n_ident,
+                                      n_dupl,
+                                      n_lost))
+            if self.isLeaf():
+                NHX += ':Singleton={}'.format(n_singleton)
+            else:
+                NHX += ':Novel={}'.format(n_novel)
+
+            return NHX
+        return ''
 
     def addChild(self, c):
         if not c in self.down:
@@ -895,6 +927,7 @@ class FamHistory(object):
     def __init__(self, parser, analyzer):
         self.parser = parser
         self.analyzer = analyzer
+        self._geneFamList = None
 
     def __len__(self):
         return self.get_number_of_fams(singletons=True)
@@ -904,7 +937,11 @@ class FamHistory(object):
 
     @property
     def geneFamList(self):
-        return sorted(self.geneFamDict.values())
+        return self._geneFamList
+
+    @geneFamList.setter
+    def geneFamList(self, gfam_list):
+        self._geneFamList = sorted(gfam_list)
 
     def setXRefTag(self, tag):
         """set the attribute name of the 'gene' elements which should
@@ -920,6 +957,7 @@ class FamHistory(object):
             gfam.analyze(self.analyzer, level)
 
         self.geneFamDict = {gf.getFamId(): gf for gf in gfamList}
+        self.geneFamList = gfamList
         self.analyzedLevel = level
 
     def write(self, fd, speciesFilter=None):
@@ -995,10 +1033,8 @@ class Comparer(object):
     """
 
     def __init__(self, fam_history_1, fam_history_2):
-        self.i1 = (x for x in sorted(fam_history_1.geneFamList)
-                    if not x.getFamId() == 'n/a')
-        self.i2 = (x for x in sorted(fam_history_2.geneFamList)
-                    if not x.getFamId() == 'n/a')
+        self.i1 = iter(fam_history_1.geneFamList)
+        self.i2 = iter(fam_history_2.geneFamList)
         self.f1 = None
         self.f2 = None
         self.advance_i1()
@@ -1181,6 +1217,22 @@ class LevelComparisonResult(object):
         for fam in self.fams:
             fd.writelines(str(fam))
 
+    def summarise(self):
+        summary = {'identical': 0,
+                   'novel': 0,
+                   'lost': 0,
+                   'duplicated': 0,
+                   'singleton': 0}
+
+        for family in self.fams_dict.values():
+            if family.event in ['identical', 'lost', 'singleton', 'novel']:
+                summary[family.event] += 1
+            elif family.event == 'duplicated':
+                summary['duplicated'] += len(family.into.split('; '))
+
+        self.summary = summary
+        return summary
+
 
 class GroupAnnotator(object):
     """this class annotates orthologGroup elements with the numbering
@@ -1362,23 +1414,6 @@ class GroupAnnotator(object):
             pbar.finish()
 
 
-class TwoLevelComparisonInterpreter(object):
-
-    def __init__(self):
-        self.counts = {'identical': 0,
-                       'novel': 0,
-                       'lost': 0,
-                       'duplicated': 0,
-                       'singletons': 0}
-
-    def interpret(self, comparison):
-        for family in comparison.fams:
-            if family.event in ['identical', 'lost', 'singleton', 'novel']:
-                self.counts[family.event] += 1
-            elif family.event == 'duplicated':
-                self.counts['duplicated'] += len(family.into.split('; '))
-
-
 class ThreeLevelComparisonInterpreter(object):
 
     def __init__(self):
@@ -1397,7 +1432,6 @@ class ThreeLevelComparisonInterpreter(object):
 
     def interpret(self, comparison1, comparison2):
         pass
-
 
 
 if __name__ == "__main__":
