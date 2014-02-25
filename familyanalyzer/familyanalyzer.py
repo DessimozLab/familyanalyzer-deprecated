@@ -354,14 +354,14 @@ class Taxonomy(object):
         for n in self.hierarchy[self.root].iterDescendents():
             yield n
 
-    def iterParents(self, node, stopBefor=None):
+    def iterParents(self, node, stopBefore=None):
         """iterates over all the taxonomy nodes towards the root
-        which are above 'node' and below 'stopBefor'."""
+        which are above 'node' and below 'stopBefore'."""
 
-        if node == stopBefor:
+        if node == stopBefore:
             return
         tn = self.hierarchy[node]
-        while tn.up is not None and tn.up.name != stopBefor:
+        while tn.up is not None and tn.up.name != stopBefore:
             tn = tn.up
             yield tn.name
 
@@ -471,6 +471,8 @@ class Taxonomy(object):
 
         return comparisons
 
+    def newick(self):
+        return str(self.hierarchy[self.root]) + ';'
 
     def __str__(self):
         fd = io.StringIO()
@@ -567,12 +569,25 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
 
 
 class TaxNode(object):
+
+    reg = re.compile(r'\W') # matches anything that's NOT a-z, A-Z, 0-9 or _
+
     def __init__(self, name):
         self.name = name
         self.up = None
         self.down = list()
         self.history = None
         self.comparison = None
+
+    def __str__(self):
+        if self.reg.search(self.name):
+            label = '"{}"'.format(self.name)
+        else:
+            label = self.name
+        if self.isLeaf():
+            return label
+        subtree = ', '.join(str(ch) for ch in self.down)
+        return '({0}){1}'.format(subtree, label)
 
     def addChild(self, c):
         if not c in self.down:
@@ -1246,7 +1261,7 @@ class GroupAnnotator(object):
         pos = parent.index(child)
         el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
         el.append(self._createTaxRangeTag(specificLev))
-        for lev in self.tax.iterParents(specificLev, stopBefor=beforeLev):
+        for lev in self.tax.iterParents(specificLev, stopBefore=beforeLev):
             el.append(self._createTaxRangeTag(lev))
         el.append(child)
         parent.insert(pos, el)
