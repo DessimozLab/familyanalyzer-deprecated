@@ -271,7 +271,7 @@ class TaxonomyNewickTest(unittest.TestCase):
         self._op = SetupHelper.createOrthoXMLParserFromSimpleEx()
         self._tax = fa.TaxonomyFactory.newTaxonomy(self._op)
 
-    def test_newick(self):
+    def test_plain_newick(self):
         equivalent_trees = {
             ('((((RATNO, MOUSE)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
             ('((((MOUSE, RATNO)Rodens, (PANTR, HUMAN)Primates)Euarchontoglires, CANFA)Mammalia, XENTR)Vertebrata;'),
@@ -316,3 +316,6 @@ class TaxonomyNewickTest(unittest.TestCase):
 
         result = self._tax.newick()
         self.assertIn(result, ' '.join(equivalent_trees))
+
+    def test_decorated_newick(self):
+        pass

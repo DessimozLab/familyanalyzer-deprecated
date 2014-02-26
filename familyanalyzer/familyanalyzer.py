@@ -350,9 +350,12 @@ class Taxonomy(object):
     def __init__(self):
         raise NotImplementedError("abstract class")
 
+    # def __iter__(self):
+    #     for n in self.hierarchy[self.root].iterDescendents():
+    #         yield n
+
     def __iter__(self):
-        for n in self.hierarchy[self.root].iterDescendents():
-            yield n
+        return self.hierarchy[self.root].iterDescendents()
 
     def iterParents(self, node, stopBefore=None):
         """iterates over all the taxonomy nodes towards the root
@@ -447,6 +450,9 @@ class Taxonomy(object):
 
         self.histories = histories
         return histories
+
+    def get_node(self, node_name):
+        return self.hierarchy[node_name]
 
     def get_comparisons(self, parser):
 
@@ -927,13 +933,16 @@ class FamHistory(object):
     def __init__(self, parser, analyzer):
         self.parser = parser
         self.analyzer = analyzer
-        self._geneFamList = None
+        self._geneFamList = list()
 
     def __len__(self):
         return self.get_number_of_fams(singletons=True)
 
     def __getitem__(self, key):
         return self.geneFamDict[key]
+
+    def __iter__(self):
+        return iter(self.geneFamList)
 
     @property
     def geneFamList(self):
@@ -970,7 +979,7 @@ class FamHistory(object):
 
         formatter = lambda gid: self.parser.mapGeneToXRef(gid, self.XRefTag)
         fd.write("FamilyAnalysis at {}\n".format(self.analyzedLevel))
-        for fam in self.geneFamList:
+        for fam in self:
             fam.write(fd, speciesFilter, idFormatter=formatter)
 
     def __str__(self):
@@ -989,11 +998,9 @@ class FamHistory(object):
         return c.comp
 
     def get_number_of_fams(self, singletons=False):
-        if not hasattr(self, 'geneFamList'):
-            return 0
         if singletons:
             return len(self.geneFamList)
-        return len([x for x in self.geneFamList if not x.is_singleton()])
+        return len([x for x in self if not x.is_singleton()])
 
 
 class Comparer(object):
@@ -1182,12 +1189,31 @@ class LevelComparisonResult(object):
 
     """
 
+    groups = { 'identical': 0,
+               'duplicated': 1,
+               'lost': 2,
+               'novel': 3,
+               'singleton': 4}
+
+    groups_back = {0: 'identical',
+                   1: 'duplicated',
+                   2: 'lost',
+                   3: 'novel',
+                   4: 'singleton'}
+
     @staticmethod
     def sort_key(item):
         if item.fam == 'n/a':
             return (MAXINT,)
         return tuple((int(num) if num else alpha) for
                     (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam))
+
+    def group_sort_key(self, item):
+        return tuple(itertools.chain((self.group_key(item),),
+                                     self.sort_key(item)))
+
+    def group_key(self, item):
+        return self.groups[item.event]
 
     def __init__(self, lev1, lev2):
         self.fams_dict = dict()
@@ -1204,6 +1230,9 @@ class LevelComparisonResult(object):
     def __getitem__(self, key):
         return self.fams_dict[key]
 
+    def __iter__(self):
+        return iter(self.fams)
+
     @property
     def fams(self):
         return sorted(self.fams_dict.values(), key=self.sort_key)
@@ -1214,7 +1243,7 @@ class LevelComparisonResult(object):
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
                  format(self.lev1, self.lev2))
-        for fam in self.fams:
+        for fam in self:
             fd.writelines(str(fam))
 
     def summarise(self):
@@ -1232,6 +1261,21 @@ class LevelComparisonResult(object):
 
         self.summary = summary
         return summary
+
+    def filter(self, filters):
+        if isinstance(filters, str):
+            filters = {filters}
+        if not filters.issubset({'identical', 'lost', 'singleton', 'novel',
+                                 'duplicated'}):
+            raise Exception('Unexpected filters: {0}'.format(filters))
+        return [x for x in self if x.event in filters]
+
+    def group_fams(self):
+        return dict([(self.groups_back[num], list(iterator))
+                     for (num, iterator)
+                     in itertools.groupby(sorted(self.fams_dict.values(),
+                                                 key=self.group_sort_key),
+                                          self.group_key)])
 
 
 class GroupAnnotator(object):
@@ -1416,7 +1460,24 @@ class GroupAnnotator(object):
 
 class ThreeLevelComparisonInterpreter(object):
 
-    def __init__(self):
+    def __init__(self, history1, history2, history3, comparison1=None, comparison2=None):
+        if comparison1 is None:
+            comparison1 = history1.compare(history2)
+        elif not self._check_compatible(history1, history2, comparison1):
+            comparison1 = history1.compare(history2)
+
+        if comparison2 is None:
+            comparison2 = history2.compare(history3)
+        elif not self._check_compatible(history2, history3, comparison2):
+            comparison2 = history1.compare(history3)
+
+        self.history1 = history1
+        self.history2 = history2
+        self.history3 = history3
+
+        self.comparison1 = comparison1
+        self.comparison2 = comparison2
+
         self.counts = {'identical-identical': 0,
                        'identical-duplicated': 0,
                        'identical-lost': 0,
@@ -1430,9 +1491,57 @@ class ThreeLevelComparisonInterpreter(object):
                        'missing-singleton': 0,
                        'lost': 0}
 
-    def interpret(self, comparison1, comparison2):
+    def _check_compatible(self, history1, history2, comparison):
+        return (comparison.lev1 == history1.analyzedLevel and
+                comparison.lev2 == history2.analyzedLevel)
+
+
+    def interpret(self):
+        assert comparison1.lev2 == comparison2.lev1
+        lowest_level_fams = list(x.fam for x in comparison1.filter({'identical', 'lost', 'duplicated'}))
+        mid_level_gains = list(x.fam for x in comparison1.filter({'novel', 'singleton'}))
+
+
+
+
+
+    def trace_fam(self, fam_id):
+        trace = ['-', '-', '-']
+        try:
+            fam = self.comparison1[fam_id]
+        except KeyError:
+            fam = self.comparison2[fam_id]
+
+    def write(self, fd, output):
+        if output == 'text':
+            InterpreterTextWriter.write(self)
+        elif output == 'HTML':
+            InterpreterHTMLWriter.write(self)
+        elif output == 'JSON':
+            InterpreterJSONWriter.write(self)
+        else:
+            raise Exception('Unknown output: {}'.format(output))
+
+
+class InterpreterTextWriter(object):
+
+    @classmethod
+    def write(cls, obj, fd):
         pass
 
+
+class InterpreterHTMLWriter(object):
+
+    @classmethod
+    def write(cls, obj, fd):
+        pass
+
+
+class InterpreterJSONWriter(object):
+
+    @classmethod
+    def write(cls, obj, fd):
+        pass
 
 if __name__ == "__main__":
     import argparse
@@ -1446,9 +1555,6 @@ if __name__ == "__main__":
                               "the internal (purely numerical) ids are reported."))
     parser.add_argument('--show_levels', action='store_true',
                         help='print the levels and species found in the orthoXML file and quit')
-    parser.add_argument('-r', '--use-recursion', action='store_true',
-                        help=("DEPRECATED: Use recursion to sample families that are a "
-                              "subset of the query"))
     parser.add_argument('--taxonomy', default='implicit',
                         help=("Taxonomy used to reconstruct intermediate levels. "
                               "Has to be either 'implicit' (default) or a path to "
@@ -1526,8 +1632,6 @@ if __name__ == "__main__":
     if args.add_singletons:
         op.augmentSingletons()
 
-    if args.use_recursion:
-        hist = op.getFamHistoryByRecursion(args.species, args.level)
     else:
         hist = op.getFamHistory()
         hist.analyzeLevel(args.level)
