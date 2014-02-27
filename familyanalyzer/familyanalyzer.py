@@ -11,28 +11,9 @@ import itertools
 import io
 import re
 import sys
-try:
-    from progressbar import ProgressBar, Percentage, Timer, ETA, Bar
-    PROGRESSBAR = True
-except ImportError:
-    PROGRESSBAR = False
-
+from .messaging import PROGRESSBAR, setup_progressbar
 
 MAXINT = sys.maxsize
-
-
-def setup_progressbar(msg, size):
-    if not msg.endswith(': '):
-        msg += ': '
-
-    widgets = [msg,
-               Percentage(), ' ',
-               Bar(), ' ',
-               Timer(), ' ',
-               ETA()]
-
-    pbar = ProgressBar(widgets=widgets, maxval=size)
-    return pbar
 
 
 class ElementError(Exception):
@@ -160,7 +141,7 @@ class OrthoXMLParser(object):
                 element.text = None
             element.tail = None
 
-    def mapGeneToXRef(self, id_, typ='geneId'):
+    def mapGeneToXRef(self, id_, typ='protId'):
         """
         Looks up id_ (integer id_ number as a string) and type in self._xrefs
         dictionary (aka self._xrefs)
@@ -1542,6 +1523,7 @@ class InterpreterJSONWriter(object):
     @classmethod
     def write(cls, obj, fd):
         pass
+
 
 if __name__ == "__main__":
     import argparse
