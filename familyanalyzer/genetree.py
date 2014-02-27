@@ -1,5 +1,6 @@
-from .messaging import PROGRESSBAR, setup_progressbar
 import re
+from .tools import PROGRESSBAR, setup_progressbar
+
 
 class GeneTree(object):
     def __init__(self, root):
@@ -124,6 +125,7 @@ class GeneTreeTracer(object):
 
         for i, job in enumerate(job_list, start=1):
             self.trace_gene_family(*job)
+            self._reset_counters()
             if PROGRESSBAR:
                 pbar.update(i)
 
@@ -162,7 +164,7 @@ class GeneTreeTracer(object):
                     parent = self._create_parent(taxnode.name, 'speciation',
                         taxnode.name)
                     if add_genelists:
-                        parent.genes = fam.getMemberGenes()
+                        parent.genes = family.getMemberGenes()
                 next_fam = child.history[fam_id]
                 if child.isLeaf():
                     gene = next_fam.getMemberGenes()[0]
