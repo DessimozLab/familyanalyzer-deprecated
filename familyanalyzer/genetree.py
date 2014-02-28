@@ -177,16 +177,20 @@ class GeneTreeTracer(object):
                 if add_genelists:
                     node.genes = next_fam.getMemberGenes()
                 parent.add_child(node)
-                self.trace_gene_family(child, next_fam, node)
+                self.trace_gene_family(child, next_fam, node, add_genelists)
 
             elif comparison.event == 'duplicated':
                 if parent is None:
                     parent = self._create_parent(taxnode.name, 'duplication',
                         taxnode.name)
+                    if add_genelists:
+                        parent.genes = family.getMemberGenes()
                 self._dup_counter += 1
                 dup = GeneTreeNode('DUP_{0}'.format(self._dup_counter),
                     node_type='duplication', level='')
                 parent.add_child(dup)
+                if add_genelists:
+                    dup.genes = list()
                 for dup_id in comparison.into.split('; '):
                     next_fam = child.history[dup_id]
                     if child.isLeaf():
@@ -198,7 +202,8 @@ class GeneTreeTracer(object):
                             level=child.name)
                     if add_genelists:
                         node.genes = next_fam.getMemberGenes()
+                        dup.genes.extend(node.genes)
                     dup.add_child(node)
-                    self.trace_gene_family(child, next_fam, node)
+                    self.trace_gene_family(child, next_fam, node, add_genelists)
 
         return parent
