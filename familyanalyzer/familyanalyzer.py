@@ -13,7 +13,7 @@ import re
 import sys
 from .tools import enum, PROGRESSBAR, setup_progressbar
 from .orthoxmlquery import ElementError, OrthoXMLQuery
-from .taxonomy import TaxRangeOrthoXMLTaxonomy, XMLTaxonomy
+from .taxonomy import NewickTaxonomy, TaxRangeOrthoXMLTaxonomy, XMLTaxonomy
 
 MAXINT = sys.maxsize
 
@@ -1009,194 +1009,53 @@ class GroupAnnotator(object):
             pbar.finish()
 
 
-class ThreeLevelComparisonInterpreter(object):
+# if __name__ == "__main__":
+#     from .tools import handle_args
 
-    def __init__(self, history1, history2, history3, comparison1=None, comparison2=None):
-        if comparison1 is None:
-            comparison1 = history1.compare(history2)
-        elif not self._check_compatible(history1, history2, comparison1):
-            comparison1 = history1.compare(history2)
+#     args = handle_args()
 
-        if comparison2 is None:
-            comparison2 = history2.compare(history3)
-        elif not self._check_compatible(history2, history3, comparison2):
-            comparison2 = history1.compare(history3)
+#     op = OrthoXMLParser(args.orthoxml)
+#     if args.show_levels:
+#         print("Species:\n{0}\n\nLevels:\n{1}".format(
+#               '\n'.join(sorted(list(op.getSpeciesSet()))),
+#               '\n'.join(sorted(op.getLevels()))))
+#         sys.exit()
+#     print("Analyzing {} on taxlevel {}".format(args.orthoxml, args.level))
+#     print("Species found:")
+#     print("; ".join(op.getSpeciesSet()))
+#     print("--> analyzing " + "; ".join(args.species))
 
-        self.history1 = history1
-        self.history2 = history2
-        self.history3 = history3
+#     if args.taxonomy == "implicit":
+#         tax = TaxonomyFactory.newTaxonomy(op)
+#     else:
+#         from newick import NewickTaxonomy
+#         tax = TaxonomyFactory.newTaxonomy(args.taxonomy)
+#         if isinstance(tax, NewickTaxonomy):
+#             tax.annotate_from_orthoxml(op)
 
-        self.comparison1 = comparison1
-        self.comparison2 = comparison2
+#     if args.show_taxonomy:
+#         print("Use following taxonomy")
+#         print(tax)
 
-        self.counts = {'identical-identical': 0,
-                       'identical-duplicated': 0,
-                       'identical-lost': 0,
-                       'duplicated-identical': 0,
-                       'duplicated-duplicated': 0,
-                       'duplicated-lost': 0,
-                       'novel-identical': 0,
-                       'novel-duplicated': 0,
-                       'novel-lost': 0,
-                       'missing-novel': 0,
-                       'missing-singleton': 0,
-                       'lost': 0}
+#     # add taxonomy to parser
+#     op.augmentTaxonomyInfo(tax, args.propagate_top)
 
-    def _check_compatible(self, history1, history2, comparison):
-        return (comparison.lev1 == history1.analyzedLevel and
-                comparison.lev2 == history2.analyzedLevel)
+#     if args.add_singletons:
+#         op.augmentSingletons()
 
+#     else:
+#         hist = op.getFamHistory()
+#         hist.analyzeLevel(args.level)
+#     if args.compare_second_level is None:
+#         hist.setXRefTag(args.xreftag)
+#         hist.write(sys.stdout, speciesFilter=args.species)
+#     else:
+#         hist2 = op.getFamHistory()
+#         hist2.analyzeLevel(args.compare_second_level)
+#         print("Comparing taxlevel {}\n to taxlevel {}".format(
+#             args.level, args.compare_second_level))
+#         comp = hist.compare(hist2)
+#         comp.write(sys.stdout)
 
-    def interpret(self):
-        assert comparison1.lev2 == comparison2.lev1
-        lowest_level_fams = list(x.fam for x in comparison1.filter({'identical', 'lost', 'duplicated'}))
-        mid_level_gains = list(x.fam for x in comparison1.filter({'novel', 'singleton'}))
-
-
-
-
-
-    def trace_fam(self, fam_id):
-        trace = ['-', '-', '-']
-        try:
-            fam = self.comparison1[fam_id]
-        except KeyError:
-            fam = self.comparison2[fam_id]
-
-    def write(self, fd, output):
-        if output == 'text':
-            InterpreterTextWriter.write(self)
-        elif output == 'HTML':
-            InterpreterHTMLWriter.write(self)
-        elif output == 'JSON':
-            InterpreterJSONWriter.write(self)
-        else:
-            raise Exception('Unknown output: {}'.format(output))
-
-
-class InterpreterTextWriter(object):
-
-    @classmethod
-    def write(cls, obj, fd):
-        pass
-
-
-class InterpreterHTMLWriter(object):
-
-    @classmethod
-    def write(cls, obj, fd):
-        pass
-
-
-class InterpreterJSONWriter(object):
-
-    @classmethod
-    def write(cls, obj, fd):
-        pass
-
-
-if __name__ == "__main__":
-    import argparse
-    import sys
-
-    parser = argparse.ArgumentParser(description='Analyze Hierarchical OrthoXML families.')
-    parser.add_argument('--xreftag', default=None,
-                        help=("xref tag of genes to report. OrthoXML allows to "
-                              "store multiple ids and xref annotations per gene "
-                              "as attributes in the species section. If not set, "
-                              "the internal (purely numerical) ids are reported."))
-    parser.add_argument('--show_levels', action='store_true',
-                        help='print the levels and species found in the orthoXML file and quit')
-    parser.add_argument('--taxonomy', default='implicit',
-                        help=("Taxonomy used to reconstruct intermediate levels. "
-                              "Has to be either 'implicit' (default) or a path to "
-                              "a file in Newick format. The taxonomy might be "
-                              "multifurcating. If set to 'implicit', the "
-                              "taxonomy is extracted from the input OrthoXML file. "
-                              "The orthoXML level do not have to cover all the "
-                              "levels for all families. In order to infer gene losses "
-                              "Family-Analyzer needs to infer these skipped levels "
-                              "and reconcile each family with the complete taxonomy."))
-    parser.add_argument('--propagate_top', action='store_true',
-                        help=("propagate taxonomy levels up to the toplevel. As an "
-                              "illustration, consider a gene family in an eukaryotic "
-                              "analysis that has only mammalian genes. Its topmost "
-                              "taxonomic level will therefor be 'Mammalia' and an "
-                              "ancestral gene was gained at that level. However, if "
-                              "'--propagete-top' is set, the family is assumed to have "
-                              "already be present in the topmost taxonomic level, i.e. "
-                              "Eukaryota in this example, and non-mammalian species "
-                              "have all lost this gene."))
-    parser.add_argument('--show_taxonomy', action='store_true',
-                        help='write the taxonomy used to standard out. ')
-    parser.add_argument('--store_augmented_xml', default=None,
-                        help=("filename to which the input orthoxml file with "
-                              "augmented annotations is written. The augmented "
-                              "annotations include for example the additional "
-                              "taxonomic levels of orthologGroup and unique HOG "
-                              "IDs."))
-    parser.add_argument('--add_singletons', action='store_true',
-                        help=("Take singletons - genes from the input set that "
-                              "weren't assigned to orthologous groups and "
-                              "appear as novel gains in the taxonomy leaves - "
-                              "and add them to the xml as single-member "
-                              "orthologGroups"))
-    parser.add_argument('--compare_second_level', default=None,
-                        help=("Compare secondary level with primary one, i.e. "
-                              "report what happend between the secondary and primary "
-                              "level to the individual histories. Note that the "
-                              "Second level needs to be younger than the primary."))
-    parser.add_argument('orthoxml', help='path to orthoxml file to be analyzed')
-    parser.add_argument('level', help='taxonomic level at which analysis should be done')
-    parser.add_argument('species', nargs="+", help=("(list of) species to be analyzed. "
-                              "Note that only genes of the selected species are "
-                              "reported. In order for the output to make sense, "
-                              "the selected species all must be part of the "
-                              "linages specified in 'level' (and --compare_second_level)."))
-    args = parser.parse_args()
-
-    op = OrthoXMLParser(args.orthoxml)
-    if args.show_levels:
-        print("Species:\n{0}\n\nLevels:\n{1}".format(
-              '\n'.join(sorted(list(op.getSpeciesSet()))),
-              '\n'.join(sorted(op.getLevels()))))
-        sys.exit()
-    print("Analyzing {} on taxlevel {}".format(args.orthoxml, args.level))
-    print("Species found:")
-    print("; ".join(op.getSpeciesSet()))
-    print("--> analyzing " + "; ".join(args.species))
-
-    if args.taxonomy == "implicit":
-        tax = TaxonomyFactory.newTaxonomy(op)
-    else:
-        from newick import NewickTaxonomy
-        tax = TaxonomyFactory.newTaxonomy(args.taxonomy)
-        if isinstance(tax, NewickTaxonomy):
-            tax.annotate_from_orthoxml(op)
-
-    if args.show_taxonomy:
-        print("Use following taxonomy")
-        print(tax)
-
-    # add taxonomy to parser
-    op.augmentTaxonomyInfo(tax, args.propagate_top)
-
-    if args.add_singletons:
-        op.augmentSingletons()
-
-    else:
-        hist = op.getFamHistory()
-        hist.analyzeLevel(args.level)
-    if args.compare_second_level is None:
-        hist.setXRefTag(args.xreftag)
-        hist.write(sys.stdout, speciesFilter=args.species)
-    else:
-        hist2 = op.getFamHistory()
-        hist2.analyzeLevel(args.compare_second_level)
-        print("Comparing taxlevel {}\n to taxlevel {}".format(
-            args.level, args.compare_second_level))
-        comp = hist.compare(hist2)
-        comp.write(sys.stdout)
-
-    if args.store_augmented_xml is not None:
-        op.write(args.store_augmented_xml)
+#     if args.store_augmented_xml is not None:
+#         op.write(args.store_augmented_xml)

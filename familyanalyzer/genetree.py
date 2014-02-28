@@ -2,6 +2,10 @@ import re
 from .tools import PROGRESSBAR, setup_progressbar
 
 
+class GeneTreeNodeException(Exception):
+    pass
+
+
 class GeneTree(object):
     def __init__(self, root):
         self.root = root
@@ -78,6 +82,41 @@ class GeneTreeNode(object):
         if self.taxonomic_level > '':
             NHX_string += ':S={0}'.format(self.taxonomic_level)
         return '[' + NHX_string + ']'
+
+    def delete(self, recursive=False):
+        """ Deletes this node from the tree. If recursive=True it also
+        deletes the entire subtree below this node. If recursive=False
+        the subtree is attached to this node's parent.
+        """
+        if not self.parent:
+            raise GeneTreeNodeException('You can\'t delete the root node')
+        for child in self.children:
+            self.parent.add_child(child)
+            if recursive:
+                child.delete(recursive)
+        self.parent.children.remove(self)
+        self.children = list()
+
+    def _invert(self):
+        """ Inverting its relationship with its parent (oedipal!)
+        """
+        self.add_child(self.parent)
+        self.parent.children.remove(self)
+
+    def reroot(self):
+        """ Reroots the tree at this node
+        """
+        if not self.parent:
+            return self
+
+        stack = list()
+        n = self
+        while not (n.parent is None):
+            stack.append(n)
+            n = n.parent
+        for node in stack[::-1]:
+            node._invert()
+        return self
 
     def write(self, NHX=True):
         name = self.name

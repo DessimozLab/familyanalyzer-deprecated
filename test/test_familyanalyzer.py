@@ -340,3 +340,32 @@ class GeneTreeNodeTest(unittest.TestCase):
                     ' grandchild3_A grandchild3_B grandchild4')
         result = ' '.join(x.name for x in self.root)
         self.assertEqual(expected, result)
+
+    def test_delete(self):
+        d = self.root.children[1]
+        d.delete()
+        expected_n = ('root child1 grandchild1 grandchild2 D grandchild3_A'
+                      ' grandchild3_B grandchild4')
+        expected_d = ('child2')
+        result_n = ' '.join(x.name for x in self.root)
+        result_d = ' '.join(x.name for x in d)
+        self.assertEqual((expected_n, expected_d), (result_n, result_d))
+
+    def test_delete_recursive(self):
+        self.setUp()
+        d = self.root.children[1]
+        d.delete(True)
+        expected_n = ('root child1 grandchild1 grandchild2')
+        expected_d = ('child2')
+        result_n = ' '.join(x.name for x in self.root)
+        result_d = ' '.join(x.name for x in d)
+        self.assertEqual((expected_n, expected_d), (result_n, result_d))
+
+    def test_reroot(self):
+        self.setUp()
+        d = self.root.children[1]
+        d.reroot()
+        expected = ('child2 D grandchild3_A grandchild3_B grandchild4 root'
+                    ' child1 grandchild1 grandchild2')
+        result = ' '.join(x.name for x in d)
+        self.assertEqual(expected, result)

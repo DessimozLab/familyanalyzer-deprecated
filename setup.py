@@ -10,4 +10,5 @@ setup(
     description='todoc',
     packages=find_packages(),
     install_requires=['lxml', 'progressbar-latest'],
+    scripts=['bin/familyanalyzer']
 )

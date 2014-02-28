@@ -174,7 +174,8 @@ class MiniTaxonomy(Taxonomy):
         if comparison2 is None:
             comparison2 = history2.compare(history3)
 
-        self.check_comparison_consistency(comparison1, comparison2)
+        self.check_comparison_consistency(history1, history2, history3,
+                                          comparison1, comparison2)
 
         bottom = TaxNode(history1.analyzedLevel)
         middle = TaxNode(history2.analyzedLevel)
@@ -203,9 +204,14 @@ class MiniTaxonomy(Taxonomy):
         if not {label1, label2}.issubset(tax.iterParents(label3)):
             raise TaxonomyInconsistencyError('Taxonomic hierarchy is violated')
 
-    def check_comparison_consistency(self, comparison1, comparison2):
-        if not comparison1.lev2 == comparison2.lev1:
-            raise TaxonomyInconsistencyError('Comparisons don\'t overlap')
+    def check_comparison_consistency(self, history1, history2, history3, comp1,
+                                     comp2):
+        predicate = (comp1.lev1 == history1.analyzedLevel and
+                     comp1.lev2 == comp2.lev1 == history2.analyzedLevel and
+                     comp2.lev2 == history3.analyzedLevel)
+        if not predicate:
+            raise TaxonomyInconsistencyError('Comparisons and histories'
+                                             ' don\'t overlap')
 
 
 class XMLTaxonomy(Taxonomy):
