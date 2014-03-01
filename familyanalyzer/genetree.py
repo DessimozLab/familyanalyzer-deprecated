@@ -193,6 +193,12 @@ class GeneTreeTracer(object):
             comparison = child.comparison[fam_id]
 
             if comparison.event == 'lost':
+                if parent is None:
+                    parent = self._create_parent(taxnode.name, 'speciation',
+                        taxnode.name)
+                    if add_genelists:
+                        parent.genes = family.getMemberGenes()
+                    parent.fam_id = fam_id
                 self._loss_counter += 1
                 node = GeneTreeNode('LOSS_{0}_{1}'.format(self._loss_counter,
                                                           child.name),

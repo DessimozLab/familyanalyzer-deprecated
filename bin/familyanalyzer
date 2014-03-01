@@ -88,6 +88,7 @@ def handle_args():
                         help=help_messages['add_singletons'])
     parser.add_argument('--compare_second_level', default=None,
                         help=help_messages['compare_second_level'])
+    parser.add_argument('--intermediate_levels', nargs="+")
     parser.add_argument('orthoxml', help=help_messages['orthoxml'])
     parser.add_argument('level', help=help_messages['level'])
     parser.add_argument('species', nargs="+", help=help_messages['species'])
@@ -158,6 +159,25 @@ def main():
             fam.write(sys.stdout, None,
                 idFormatter=lambda gid: op.mapGeneToXRef(gid, h.XRefTag))
 
+    if args.intermediate_levels:
+        for spec in args.species:
+            print('Analyzing intermediate levels for species {}'.format(spec))
+            histories = [hist]
+            for lev in args.intermediate_levels:
+                h = op.getFamHistory()
+                h.analyzeLevel(lev)
+                histories.append(h)
+            h = op.getFamHistory()
+            h.analyzeLevel(spec)
+            histories.append(h)
+            lt = fa.LinearTaxonomy(tax, histories)
+            gtt = fa.GeneTreeTracer(op, lt)
+            gtt.trace_gene_families(add_genelists=True)
+            for t in gtt.trees:
+                print('Family {}'.format(t.root.fam_id))
+                for node in t:
+                    print('{}\t{}'.format(node.fam_id, node.name), node.genes)
+                print()
 
 if __name__ == "__main__":
     sys.exit(main())

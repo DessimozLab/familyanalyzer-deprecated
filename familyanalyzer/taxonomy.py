@@ -161,6 +161,16 @@ class Taxonomy(object):
         return res
 
 
+# class LinearTaxonomyMultiSpecies(LinearTaxonomy):
+#     def __init__(self, taxonomy, histories, species_histories):
+#         super().__init__(taxonomy, histories, None)
+#         top = histories[-1]
+#         species_comparisons = self.generate_comparisons(species_histories)
+
+#     def generate_comparisons(self, species_histories):
+#         for i in species_histories:
+#             pass
+
 class LinearTaxonomy(Taxonomy):
     """ Linear taxonomy """
 
