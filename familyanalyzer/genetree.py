@@ -36,6 +36,7 @@ class GeneTreeNode(object):
         self.children        = list()
         self.parent          = None
         self.genes           = list()
+        self.fam_id          = ''
 
     @property
     def name(self):
@@ -193,9 +194,11 @@ class GeneTreeTracer(object):
 
             if comparison.event == 'lost':
                 self._loss_counter += 1
-                node = GeneTreeNode('LOSS_{0}'.format(self._loss_counter),
+                node = GeneTreeNode('LOSS_{0}_{1}'.format(self._loss_counter,
+                                                          child.name),
                             node_type='loss',
                             level=child.name)
+                node.fam_id = fam_id
                 parent.add_child(node)
 
             elif comparison.event == 'identical':
@@ -204,6 +207,7 @@ class GeneTreeTracer(object):
                         taxnode.name)
                     if add_genelists:
                         parent.genes = family.getMemberGenes()
+                    parent.fam_id = fam_id
                 next_fam = child.history[fam_id]
                 if child.isLeaf():
                     gene = next_fam.getMemberGenes()[0]
@@ -215,6 +219,7 @@ class GeneTreeTracer(object):
                         level=child.name)
                 if add_genelists:
                     node.genes = next_fam.getMemberGenes()
+                node.fam_id = fam_id
                 parent.add_child(node)
                 self.trace_gene_family(child, next_fam, node, add_genelists)
 
@@ -224,9 +229,11 @@ class GeneTreeTracer(object):
                         taxnode.name)
                     if add_genelists:
                         parent.genes = family.getMemberGenes()
+                    parent.fam_id = fam_id
                 self._dup_counter += 1
                 dup = GeneTreeNode('DUP_{0}'.format(self._dup_counter),
                     node_type='duplication', level='')
+                dup.fam_id = fam_id
                 parent.add_child(dup)
                 if add_genelists:
                     dup.genes = list()
@@ -242,6 +249,7 @@ class GeneTreeTracer(object):
                     if add_genelists:
                         node.genes = next_fam.getMemberGenes()
                         dup.genes.extend(node.genes)
+                    node.fam_id = dup_id
                     dup.add_child(node)
                     self.trace_gene_family(child, next_fam, node, add_genelists)
 

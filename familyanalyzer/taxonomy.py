@@ -15,12 +15,19 @@ class ParseError(Exception):
     pass
 
 
+class LinearTaxonomyException(Exception):
+    pass
+
+
 class Taxonomy(object):
     def __init__(self):
         raise NotImplementedError("abstract class")
 
     def __iter__(self):
         return self.hierarchy[self.root].iterDescendents()
+
+    def __getitem__(self, node_name):
+        return self.hierarchy[node_name]
 
     def iterParents(self, node, stopBefore=None):
         """iterates over all the taxonomy nodes towards the root
@@ -116,9 +123,6 @@ class Taxonomy(object):
         self.histories = histories
         return histories
 
-    def get_node(self, node_name):
-        return self.hierarchy[node_name]
-
     def get_comparisons(self, parser):
 
         if getattr(self, 'histories', None) is None:
@@ -157,61 +161,69 @@ class Taxonomy(object):
         return res
 
 
-class MiniTaxonomy(Taxonomy):
-    """Builds a taxonomy from three FamHistory objects, which are in
-    a taxonomic hierarchy - history1 is ancestral to history2, which is
-    ancestral to history3. This can be checked against an external Taxonomy
-    using the `check_against_taxonomy` method. Comparison1 compares history1
-    to history2, and comparison2 compares history2 to history3. These can be
-    supplied or generated."""
+class LinearTaxonomy(Taxonomy):
+    """ Linear taxonomy """
 
+    def __init__(self, taxonomy, histories, comparisons=None):
+        # member variable error-checking and setup
+        self.check_histories(taxonomy, histories)
+        if comparisons is None:
+            comparisons = self.generate_comparisons(histories)
+        self.check_comparisons(comparisons)
+        self.check_comparisons_and_histories(histories, comparisons)
 
-    def __init__(self, history1, history2, history3, comparison1=None,
-                 comparison2=None):
-
-        if comparison1 is None:
-            comparison1 = history1.compare(history2)
-        if comparison2 is None:
-            comparison2 = history2.compare(history3)
-
-        self.check_comparison_consistency(history1, history2, history3,
-                                          comparison1, comparison2)
-
-        bottom = TaxNode(history1.analyzedLevel)
-        middle = TaxNode(history2.analyzedLevel)
-        top    = TaxNode(history3.analyzedLevel)
-
-        bottom.attachFamHistory(history1)
-        middle.attachFamHistory(history2)
-        top.attachFamHistory(history3)
-
-        middle.attachLevelComparisonResult(comparison1)
-        top.attachLevelComparisonResult(comparison2)
-
-        bottom.addChild(middle)
-        middle.addChild(top)
-
-        middle.addParent(bottom)
-        top.addParent(middle)
-
+        # build taxonomy
         self.hierarchy = dict()
-        self.root = bottom.name
-        self.hierarchy = dict((node.name, node)
-                              for node in bottom.iterDescendents())
+        self.histories = dict()
+        nodes = [TaxNode(h.analyzedLevel) for h in histories]
+        self.root = nodes[0].name
+        for i in range(len(histories) - 1):
+            nodes[i].addChild(nodes[i+1])
+            nodes[i+1].addParent(nodes[i])
+            self.hierarchy[nodes[i].name] = nodes[i]
+            self.histories[nodes[i].name] = histories[i]
+            nodes[i].attachFamHistory(histories[i])
+            nodes[i+1].attachLevelComparisonResult(comparisons[i])
+        nodes[-1].attachFamHistory(histories[-1])
+        self.hierarchy[nodes[-1].name] = nodes[-1]
+        self.histories[nodes[-1].name] = histories[-1]
 
-    def check_against_taxonomy(self, tax):
-        label1, label2, label3 = (n.history.analyzedLevel for n in self)
-        if not {label1, label2}.issubset(tax.iterParents(label3)):
-            raise TaxonomyInconsistencyError('Taxonomic hierarchy is violated')
+    def generate_comparisons(self, histories):
+        comparisons = list()
+        for i in range(len(histories) - 1):
+            comparisons.append(histories[i].compare(histories[i+1]))
+        return comparisons
 
-    def check_comparison_consistency(self, history1, history2, history3, comp1,
-                                     comp2):
-        predicate = (comp1.lev1 == history1.analyzedLevel and
-                     comp1.lev2 == comp2.lev1 == history2.analyzedLevel and
-                     comp2.lev2 == history3.analyzedLevel)
-        if not predicate:
-            raise TaxonomyInconsistencyError('Comparisons and histories'
-                                             ' don\'t overlap')
+    def check_histories(self, taxonomy, histories):
+        labels = [h.analyzedLevel for h in histories]
+        for i in range(len(labels) - 1):
+            if not taxonomy.is_ancestor_of(labels[i], labels[i+1]):
+                raise LinearTaxonomyException('Histories are not in a valid '
+                                              'taxonomic sequence')
+
+    def check_comparisons(self, comparisons):
+        for i in range(len(comparisons) - 1):
+            if not comparisons[i].lev2 == comparisons[i+1].lev1:
+                raise LinearTaxonomyException('Comparisons do not overlap')
+
+    def check_comparisons_and_histories(self, histories, comparisons):
+        if not (len(comparisons) + 1) == len(histories):
+            raise LinearTaxonomyException('Incompatible length lists of '
+                                          'histories and comparisons')
+        inter = self.interleave(histories, comparisons)
+        for i in range(1, len(inter), 2):
+            h0 = inter[i-1]
+            comp = inter[i]
+            h1 = inter[i+1]
+            if not (h0.analyzedLevel == comp.lev1 and
+                    comp.lev2 == h1.analyzedLevel):
+                raise LinearTaxonomyException('Histories and comparisons do '
+                                              'not overlap')
+
+    def interleave(self, histories, comparisons):
+        return [item for item in itertools.chain(
+                    *itertools.zip_longest(histories, comparisons))
+                    if item is not None]
 
 
 class XMLTaxonomy(Taxonomy):
