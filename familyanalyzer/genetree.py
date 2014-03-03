@@ -145,7 +145,7 @@ class GeneTreeTracer(object):
     def _get_job_list(self, add_genelists=False):
         job_list = list()
         for n in self.tax:
-            if n.up is None:
+            if (self.tax.root == n.name) or (n.up is None):
                 for family in n.history.geneFamList:
                     job_list.append((n, family, None, add_genelists))
             else:

@@ -1,3 +1,5 @@
+from functools import reduce
+import copy
 import io
 import itertools
 import os
@@ -44,6 +46,32 @@ class Taxonomy(object):
         """ Returns True if `anc' is an ancestor of `desc'"""
         return anc in self.iterParents(desc)
 
+    def retain(self, leaves):
+        """ Returns a deepcopy of self with all leaves not in `leaves'
+        pruned away """
+        keep = set(leaves)
+        for leaf in leaves:
+            keep.update(set(self.iterParents(leaf)))
+        lose=set(self.hierarchy.keys()).difference(keep)
+        return self._prune_set_of_nodes(lose)
+
+    def prune(self, leaves):
+        """ Returns a deepcopy of self with `leaves' pruned away """
+        all_leaves = {n.name for n in self.hierarchy[self.root].iterLeaves()}
+        keep = all_leaves.difference(leaves)
+        return self.retain(keep)
+
+    def _prune_set_of_nodes(self, leaves):
+        """ Returns a deepcopy of self with `leaves' pruned away """
+        newtax = copy.deepcopy(self)
+        for loser in leaves:
+            if loser in newtax.hierarchy:
+                node = newtax.hierarchy[loser]
+                node.up.down.remove(node)
+                node.up = None
+                del newtax.hierarchy[loser]
+        return newtax
+
     def _countParentAmongLevelSet(self, levels):
         """helper method to count for each level how many levels
         are parent levels. e.g. (arrow: is-parent-of)
@@ -56,6 +84,13 @@ class Taxonomy(object):
             t = set(self.iterParents(lev)).intersection(levelSet)
             counts[lev] = len(t)
         return counts
+
+    def mrca(self, species):
+        """Returns most recent common ancestor (MRCA) of a set of species"""
+        ancestors = [set(self.iterParents(s)) for s in species]
+        common_ancestors = reduce(lambda x, y: x & y, ancestors)
+        mrca = self.mostSpecific(common_ancestors)
+        return mrca
 
     def mostSpecific(self, levels):
         """returns the most specific (youngest) level among a set of
@@ -161,16 +196,6 @@ class Taxonomy(object):
         return res
 
 
-# class LinearTaxonomyMultiSpecies(LinearTaxonomy):
-#     def __init__(self, taxonomy, histories, species_histories):
-#         super().__init__(taxonomy, histories, None)
-#         top = histories[-1]
-#         species_comparisons = self.generate_comparisons(species_histories)
-
-#     def generate_comparisons(self, species_histories):
-#         for i in species_histories:
-#             pass
-
 class LinearTaxonomy(Taxonomy):
     """ Linear taxonomy """
 
@@ -234,6 +259,25 @@ class LinearTaxonomy(Taxonomy):
         return [item for item in itertools.chain(
                     *itertools.zip_longest(histories, comparisons))
                     if item is not None]
+
+
+# class LinearTaxonomyMultiSpecies(LinearTaxonomy):
+#     def __init__(self, taxonomy, histories, species_histories):
+#         super().__init__(taxonomy, histories, None)
+#         top = histories[-1]
+#         species_comparisons = [top.compare(h) for h in species_histories]
+#         for i, h in enumerate(species_histories):
+#             if not taxonomy.is_ancestor_of(top.analyzedLevel, h.analyzedLevel):
+#                 raise LinearTaxonomyException('Species {} is not a descendant '
+#                                               'of {}'.format(h.analyzedLevel,
+#                                                              top.analyzedLevel))
+#             node = TaxNode(h.analyzedLevel)
+#             node.attachFamHistory(h)
+#             node.attachLevelComparisonResult(species_comparisons[i])
+#             self.hierarchy[top.analyzedLevel].addChild(node)
+#             node.addParent(self.hierarchy[top.analyzedLevel])
+#             self.hierarchy[node.name] = node
+#             self.histories[node.name] = h
 
 
 class XMLTaxonomy(Taxonomy):
@@ -368,9 +412,9 @@ class TaxNode(object):
                                       n_dupl,
                                       n_lost))
             if self.isLeaf():
-                NHX += ':Singleton={}'.format(n_singleton)
+                NHX += ':Novel=0:Singleton={}'.format(n_singleton)
             else:
-                NHX += ':Novel={}'.format(n_novel)
+                NHX += ':Novel={}:Singleton=0'.format(n_novel)
 
             return NHX
         return ''

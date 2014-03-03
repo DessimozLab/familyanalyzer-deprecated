@@ -66,7 +66,11 @@ def handle_args():
                     "Note that only genes of the selected species are "
                     "reported. In order for the output to make sense, "
                     "the selected species all must be part of the lineages "
-                    "specified in 'level' (and --compare_second_level).")
+                    "specified in 'level' (and --compare_second_level)."),
+
+        'gene_trees': ('Output extra gene family tree information, including '
+                       'a gene tree for each family, gene coverage at '
+                       'each node, and an annotated species tree')
 
     }
 
@@ -88,7 +92,8 @@ def handle_args():
                         help=help_messages['add_singletons'])
     parser.add_argument('--compare_second_level', default=None,
                         help=help_messages['compare_second_level'])
-    parser.add_argument('--intermediate_levels', nargs="+")
+    parser.add_argument('--gene_trees', action='store_true',
+                        help=help_messages['gene_trees'])
     parser.add_argument('orthoxml', help=help_messages['orthoxml'])
     parser.add_argument('level', help=help_messages['level'])
     parser.add_argument('species', nargs="+", help=help_messages['species'])
@@ -108,6 +113,10 @@ def main():
     print("Species found:")
     print("; ".join(op.getSpeciesSet()))
     print("--> analyzing " + "; ".join(args.species))
+
+    ##################
+    # DO CALCULATIONS
+    ##################
 
     if args.taxonomy == "implicit":
         tax = fa.TaxonomyFactory.newTaxonomy(op)
@@ -139,45 +148,51 @@ def main():
     hist.analyzeLevel(args.level)
     if args.compare_second_level is None:
         hist.setXRefTag(args.xreftag)
-        hist.write(sys.stdout, speciesFilter=args.species)
+
     else:
         hist2 = op.getFamHistory()
         hist2.analyzeLevel(args.compare_second_level)
-        # print("History at level 1:")
-        hist.write(sys.stdout, speciesFilter=args.species)
-        print()
-        # print("History at level 2:")
-        hist2.write(sys.stdout, speciesFilter=args.species)
-        # print("Comparing taxlevel {:>15}\n       to taxlevel{:>15}".format(
-            # args.level, args.compare_second_level))
         comp = hist.compare(hist2)
+
+    if args.gene_trees:
+        newtax = tax.retain(args.species)
+        newtax.get_comparisons(op)
+        newtax.root = args.level
+        gtt = fa.GeneTreeTracer(op, newtax)
+        gtt.trace_gene_families(add_genelists=True)
+
+    ###############
+    # WRITE RESULTS
+    ###############
+
+    hist.write(sys.stdout, speciesFilter=args.species)
+    print()
+
+    if args.compare_second_level is not None:
+        hist2.write(sys.stdout, speciesFilter=args.species)
         comp.write(sys.stdout)
+        print()
 
     if args.add_singletons:
         print('Singletons (unmatched genes):')
         for fam in singletons:
             fam.write(sys.stdout, None,
                 idFormatter=lambda gid: op.mapGeneToXRef(gid, h.XRefTag))
+        print()
 
-    if args.intermediate_levels:
-        for spec in args.species:
-            print('Analyzing intermediate levels for species {}'.format(spec))
-            histories = [hist]
-            for lev in args.intermediate_levels:
-                h = op.getFamHistory()
-                h.analyzeLevel(lev)
-                histories.append(h)
-            h = op.getFamHistory()
-            h.analyzeLevel(spec)
-            histories.append(h)
-            lt = fa.LinearTaxonomy(tax, histories)
-            gtt = fa.GeneTreeTracer(op, lt)
-            gtt.trace_gene_families(add_genelists=True)
-            for t in gtt.trees:
-                print('Family {}'.format(t.root.fam_id))
-                for node in t:
-                    print('{}\t{}'.format(node.fam_id, node.name), node.genes)
-                print()
+    if args.gene_trees:
+        print('Gene family trees')
+        for t in gtt.trees:
+            header = 'Family {}'.format(t.root.fam_id)
+            print('{1}\n{0}\n{1}\n'.format(header, '='*len(header)))
+            print('Tree:\n{}\n'.format(t))
+            print('Gene coverage:')
+            for node in t:
+                print('{}\t{}'.format(node.fam_id, node.taxonomic_level), node.genes)
+            print()
+
+        print('Annotated species tree covering {}:'.format(args.species))
+        print(newtax.newick())
 
 if __name__ == "__main__":
     sys.exit(main())
