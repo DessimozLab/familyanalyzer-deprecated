@@ -1,9 +1,13 @@
-FILES=$(shell find familyanalyzer -type 'f')
+TOP := $(dir $(CURDIR)/$(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)))
+FILES=$(shell find $(TOP) -type 'f')
 TESTFILES=$(shell find test -type 'f')
 
-.PHONY: test
+.PHONY: test whereami
 
 all: install permissions test
+
+whereami:
+	@echo $(TOP)
 
 install:
 	@echo "Updating familyanalyzer"
