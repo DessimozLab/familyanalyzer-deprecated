@@ -186,7 +186,7 @@ class GeneTreeTracer(object):
 
         fam_id = family.getFamId()
 
-        if taxnode.isLeaf():
+        if taxnode.is_leaf():
             return
 
         for child in taxnode.down:
@@ -215,7 +215,7 @@ class GeneTreeTracer(object):
                         parent.genes = family.getMemberGenes()
                     parent.fam_id = fam_id
                 next_fam = child.history[fam_id]
-                if child.isLeaf():
+                if child.is_leaf():
                     gene = next_fam.getMemberGenes()[0]
                     label = self.parser.mapGeneToXRef(gene)
                     node = GeneTreeNode(label, node_type='leaf',
@@ -245,7 +245,7 @@ class GeneTreeTracer(object):
                     dup.genes = list()
                 for dup_id in comparison.into.split('; '):
                     next_fam = child.history[dup_id]
-                    if child.isLeaf():
+                    if child.is_leaf():
                         gene = next_fam.getMemberGenes()[0]
                         label = self.parser.mapGeneToXRef(gene)
                         node = GeneTreeNode(label, node_type='leaf', level=child.name)

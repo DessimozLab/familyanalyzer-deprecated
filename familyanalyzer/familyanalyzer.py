@@ -423,7 +423,7 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
             mostGeneralLevel = self.tax.mostGeneralLevel(lev)
             speciesCoveredByLevel = {
                 l.name for l in
-                self.tax.hierarchy[mostGeneralLevel].iterLeaves()
+                self.tax.hierarchy[mostGeneralLevel].iter_leaves()
             }
 
             lostSpecies = speciesCoveredByLevel.difference(summary.keys())

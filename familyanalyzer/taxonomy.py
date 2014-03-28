@@ -2,6 +2,7 @@ from functools import reduce
 import copy
 import io
 import itertools
+from collections import deque
 import os
 import re
 from .orthoxmlquery import OrthoXMLQuery
@@ -26,7 +27,7 @@ class Taxonomy(object):
         raise NotImplementedError("abstract class")
 
     def __iter__(self):
-        return self.hierarchy[self.root].iterDescendents()
+        return self.hierarchy[self.root].iter_preorder()
 
     def __getitem__(self, node_name):
         return self.hierarchy[node_name]
@@ -57,7 +58,7 @@ class Taxonomy(object):
 
     def prune(self, leaves):
         """ Returns a deepcopy of self with `leaves' pruned away """
-        all_leaves = {n.name for n in self.hierarchy[self.root].iterLeaves()}
+        all_leaves = {n.name for n in self.hierarchy[self.root].iter_leaves()}
         keep = all_leaves.difference(leaves)
         return self.retain(keep)
 
@@ -125,7 +126,7 @@ class Taxonomy(object):
             raise Exception('No node with name {} found in '
                             'Taxonomy'.format(oldest_permitted))
         permitted = [node.name
-                     for node in oldest_permitted_node.iterDescendents()]
+                     for node in oldest_permitted_node.iter_preorder()]
 
         return [lev for lev in levels if lev in permitted]
 
@@ -148,7 +149,7 @@ class Taxonomy(object):
             history = parser.getFamHistory()
             history.analyzeLevel(level)
             histories[level] = history
-            self.hierarchy[level].attachFamHistory(history)
+            self.hierarchy[level].attach_fam_history(history)
             if PROGRESSBAR:
                 pbar.update(i)
 
@@ -176,7 +177,7 @@ class Taxonomy(object):
             child_history = self.histories[child.name]
             parent_child_comparison = parent_history.compare(child_history)
             comparisons[(parent.name, child.name)] = parent_child_comparison
-            child.attachLevelComparisonResult(parent_child_comparison)
+            child.attach_level_comparison_result(parent_child_comparison)
             if PROGRESSBAR:
                 pbar.update(i)
 
@@ -213,13 +214,13 @@ class LinearTaxonomy(Taxonomy):
         nodes = [TaxNode(h.analyzedLevel) for h in histories]
         self.root = nodes[0].name
         for i in range(len(histories) - 1):
-            nodes[i].addChild(nodes[i+1])
-            nodes[i+1].addParent(nodes[i])
+            nodes[i].add_child(nodes[i+1])
+            nodes[i+1].add_parent(nodes[i])
             self.hierarchy[nodes[i].name] = nodes[i]
             self.histories[nodes[i].name] = histories[i]
-            nodes[i].attachFamHistory(histories[i])
-            nodes[i+1].attachLevelComparisonResult(comparisons[i])
-        nodes[-1].attachFamHistory(histories[-1])
+            nodes[i].attach_fam_history(histories[i])
+            nodes[i+1].attach_level_comparison_result(comparisons[i])
+        nodes[-1].attach_fam_history(histories[-1])
         self.hierarchy[nodes[-1].name] = nodes[-1]
         self.histories[nodes[-1].name] = histories[-1]
 
@@ -272,10 +273,10 @@ class LinearTaxonomy(Taxonomy):
 #                                               'of {}'.format(h.analyzedLevel,
 #                                                              top.analyzedLevel))
 #             node = TaxNode(h.analyzedLevel)
-#             node.attachFamHistory(h)
-#             node.attachLevelComparisonResult(species_comparisons[i])
-#             self.hierarchy[top.analyzedLevel].addChild(node)
-#             node.addParent(self.hierarchy[top.analyzedLevel])
+#             node.attach_fam_history(h)
+#             node.attach_level_comparison_result(species_comparisons[i])
+#             self.hierarchy[top.analyzedLevel].add_child(node)
+#             node.add_parent(self.hierarchy[top.analyzedLevel])
 #             self.hierarchy[node.name] = node
 #             self.histories[node.name] = h
 
@@ -349,8 +350,8 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
                 if self.good(pair):
                     first, second = pair
                     #print "%s,%s is good" % pair
-                    self.hierarchy[first].addChild(self.hierarchy[second])
-                    self.hierarchy[second].addParent(self.hierarchy[first])
+                    self.hierarchy[first].add_child(self.hierarchy[second])
+                    self.hierarchy[second].add_parent(self.hierarchy[first])
         noParentNodes = [z for z in self.nodes if self.hierarchy[z].up is None]
         if len(noParentNodes) != 1:
             raise TaxonomyInconsistencyError(
@@ -364,6 +365,38 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
             if (first, node) in self.adj and (node, second) in self.adj:
                 return False
         return True
+
+
+class Queue(object):
+
+    def __init__(self):
+        self.__queue = deque()
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return len(self.__queue)
+
+    def next():
+        """ Python 2.x / 3.x compatibility hack """
+        return self.__next__()
+
+    def __next__(self):
+        if self.isempty():
+            raise StopIteration
+        return self.dequeue()
+
+    def enqueue(self, item):
+        self.__queue.append(item)
+
+    def dequeue(self):
+        if self.isempty():
+            raise Exception('empty queue')
+        return self.__queue.popleft()
+
+    def isempty(self):
+        return len(self.__queue) == 0
 
 
 class TaxNode(object):
@@ -384,7 +417,7 @@ class TaxNode(object):
             label = self.name
 
         NHX = self._get_node_NHX() + self._get_edge_NHX()
-        if self.isLeaf():
+        if self.is_leaf():
             return '{0}{1}'.format(label,
                             ('[&&NHX{0}]'.format(NHX) if NHX > '' else ''))
         subtree = ', '.join(str(ch) for ch in self.down)
@@ -411,7 +444,7 @@ class TaxNode(object):
                    ':Lost={2}'.format(n_ident,
                                       n_dupl,
                                       n_lost))
-            if self.isLeaf():
+            if self.is_leaf():
                 NHX += ':Novel=0:Singleton={}'.format(n_singleton)
             else:
                 NHX += ':Novel={}:Singleton=0'.format(n_novel)
@@ -419,46 +452,67 @@ class TaxNode(object):
             return NHX
         return ''
 
-    def addChild(self, c):
+    def add_child(self, c):
         if not c in self.down:
             self.down.append(c)
 
-    def addParent(self, p):
+    def add_parent(self, p):
         if self.up is not None and self.up != p:
             raise TaxonomyInconsistencyError(
                 "Level {} has several parents, at least two: {}, {}"
                 .format(self.name, self.up.name, p.name))
         self.up = p
 
-    def isLeaf(self):
+    def is_leaf(self):
         return len(self.down) == 0
 
-    def isInner(self):
-        return not self.isLeaf()
+    def is_inner(self):
+        return not self.is_leaf()
 
-    def isRoot(self):
+    def is_root(self):
         return self.up is None
 
-    def iterDescendents(self):
+    def iter_preorder(self):
+        """ Traverse the tree in preorder ordering: ancestors before
+        descendents """
         yield self
         for child in self.down:
-            for elem in child.iterDescendents():
+            for elem in child.iter_preorder():
                 yield elem
 
-    def iterLeaves(self):
-        for elem in self.iterDescendents():
-            if elem.isLeaf():
+    def iter_postorder(self):
+        """ Traverse the tree in postorder ordering: descendents before
+        ancestors """
+        for child in self.down:
+            for elem in child.iter_postorder():
+                yield elem
+        yield self
+
+    def iter_levelorder(self):
+        """ Traverse the tree in levelorder ordering: first the root, then
+        nodes at distance==1 from the root, then distance==2, etc. """
+        q = Queue()
+        q.enqueue(self)
+        while q:
+            node = q.dequeue()
+            yield node
+            for child in node.down:
+                q.enqueue(child)
+
+    def iter_leaves(self):
+        for elem in self.iter_preorder():
+            if elem.is_leaf():
                 yield elem
 
-    def iterInnerNodes(self):
-        for elem in self.iterDescendents():
-            if elem.isInner():
+    def iter_inner_nodes(self):
+        for elem in self.iter_preorder():
+            if elem.is_inner():
                 yield elem
 
-    def attachFamHistory(self, history):
+    def attach_fam_history(self, history):
         self.history = history
 
-    def attachLevelComparisonResult(self, comparison):
+    def attach_level_comparison_result(self, comparison):
         self.comparison = comparison
 
 
@@ -504,7 +558,7 @@ class NewickTaxonomy(Taxonomy):
                 self.nodes.add(node.name)
                 self.hierarchy[node.name] = node
                 return
-            key = frozenset((n.name for n in node.iterLeaves()))
+            key = frozenset((n.name for n in node.iter_leaves()))
             node.name = levels_dict[key]
             self.nodes.add(node.name)
             self.hierarchy[node.name] = node
@@ -563,8 +617,8 @@ class NewickTaxonomy(Taxonomy):
 
                 # get parent
                 p = self.stack[-1]
-                p.addChild(n)
-                n.addParent(p)
+                p.add_child(n)
+                n.add_parent(p)
 
                 # push subtree onto the stack
                 self.stack.append(n)
@@ -576,8 +630,8 @@ class NewickTaxonomy(Taxonomy):
 
                 # get parent from stack
                 p = self.stack[-1]
-                p.addChild(l)
-                l.addParent(p)
+                p.add_child(l)
+                l.add_parent(p)
 
             elif token.typ == tokens.ENDSUB:
                 label = self._get_label(tokens)

@@ -61,45 +61,79 @@ class TaxNodeTest(unittest.TestCase):
         self.root = fa.TaxNode('root')
         self.child = fa.TaxNode('child')
 
+        # For the iteration tests
+        self.iter_test_root = fa.TaxNode('root')
+        self.left = fa.TaxNode('left')
+        self.right = fa.TaxNode('right')
+        self.leftleft = fa.TaxNode('left-left')
+        self.leftright = fa.TaxNode('left-right')
+        self.left.add_child(self.leftleft)
+        self.left.add_child(self.leftright)
+        self.iter_test_root.add_child(self.left)
+        self.iter_test_root.add_child(self.right)
+
     def tearDown(self):
         self.root = None
         self.child = None
+        self.iter_test_root = None
+        self.left = None
+        self.right = None
+        self.leftleft = None
+        self.leftright = None
 
-    def test_addChild(self):
-        self.root.addChild(self.child)
+    def test_add_child(self):
+        self.root.add_child(self.child)
         self.assertIn(self.child, self.root.down)
 
     def test_nameProperlySet(self):
         self.assertEqual(self.root.name, 'root')
 
     def test_setParentOnce(self):
-        self.child.addParent(self.root)
+        self.child.add_parent(self.root)
         self.assertEqual(self.child.up, self.root)
 
     def test_setParentTwiceSame(self):
-        self.child.addParent(self.root)
-        self.child.addParent(self.root)
+        self.child.add_parent(self.root)
+        self.child.add_parent(self.root)
         self.assertTrue(True)
 
     def test_failWithTwoDifferentParentsSet(self):
         extraNode = fa.TaxNode('extra')
-        self.child.addParent(self.root)
+        self.child.add_parent(self.root)
         self.assertRaises(fa.TaxonomyInconsistencyError,
-                          self.child.addParent,
+                          self.child.add_parent,
                           extraNode)
 
-    def test_iterLeaves(self):
-        root = fa.TaxNode('root')
-        left = fa.TaxNode('left')
-        right = fa.TaxNode('right')
-        leftleft = fa.TaxNode('left-left')
-        leftright = fa.TaxNode('left-right')
-        left.addChild(leftleft)
-        left.addChild(leftright)
-        root.addChild(left)
-        root.addChild(right)
-        leaves = list(root.iterLeaves())
-        self.assertEqual(leaves, [leftleft, leftright, right])
+    def test_iter_leaves(self):
+        leaves = list(self.iter_test_root.iter_leaves())
+        self.assertEqual(leaves, [self.leftleft, self.leftright, self.right])
+
+    def test_iter_preorder(self):
+        nodes = list(self.iter_test_root.iter_preorder())
+        expected = [self.iter_test_root,
+                    self.left,
+                    self.leftleft,
+                    self.leftright,
+                    self.right]
+        self.assertEqual(nodes, expected)
+
+    def test_iter_postorder(self):
+        nodes = list(self.iter_test_root.iter_postorder())
+        expected = [self.leftleft,
+                    self.leftright,
+                    self.left,
+                    self.right,
+                    self.iter_test_root]
+        self.assertEqual(nodes, expected)
+
+    def test_iter_levelorder(self):
+        nodes = list(self.iter_test_root.iter_levelorder())
+        expected = [self.iter_test_root,
+                    self.left,
+                    self.right,
+                    self.leftleft,
+                    self.leftright]
+        self.assertEqual(nodes, expected)
 
 
 class GeneFamilyTest(unittest.TestCase):
