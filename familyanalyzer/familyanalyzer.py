@@ -10,66 +10,12 @@ import collections
 import itertools
 import io
 import re
+import sys
+from .tools import enum, PROGRESSBAR, setup_progressbar
+from .orthoxmlquery import ElementError, OrthoXMLQuery
+from .taxonomy import NewickTaxonomy, TaxRangeOrthoXMLTaxonomy, XMLTaxonomy
 
-
-class ElementError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return str(self.msg)
-
-
-class OrthoXMLQuery(object):
-    """Helper class with predefined queries on an orthoxml tree."""
-
-    ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
-
-    @classmethod
-    def getToplevelOrthologGroups(cls, root):
-        """returns a list with the toplevel orthologGroup elements
-        of the given root element."""
-        xquery = ".//{{{ns0}}}groups/{{{ns0}}}orthologGroup".format(**cls.ns)
-        return root.findall(xquery)
-
-    @classmethod
-    def getGeneFromId(cls, id_, root):
-        xquery = ".*//{{{}}}gene[@id='{}']".format(cls.ns['ns0'], id_)
-        return root.findall(xquery)
-
-    @classmethod
-    def getGroupsAtLevel(cls, level, root):
-        """returns a list with the orthologGroup elements which have a
-        TaxRange property equals to the requested level."""
-        xquery = (".//{{{0}}}property[@name='TaxRange'][@value='{1}']/..".
-                  format(cls.ns['ns0'], level))
-        return root.findall(xquery)
-
-    @classmethod
-    def getSubNodes(cls, targetNode, root, recursivly=True):
-        """method which returns a list of all (if recursively
-        is set to true) or only the direct children nodes
-        having 'targetNode' as their tagname.
-        The namespace is automatically added to the tagname."""
-        xPrefix = ".//" if recursivly else "./"
-        xquery = "{}{{{}}}{}".format(xPrefix, cls.ns['ns0'], targetNode)
-        return root.findall(xquery)
-
-    @classmethod
-    def is_geneRef_node(cls, element):
-        """check whether a given element is an instance of a geneRef
-        element."""
-        return element.tag == '{{{ns0}}}geneRef'.format(**cls.ns)
-
-    @classmethod
-    def getLevels(cls, element):
-        """returns a list of the TaxRange levels associated to the
-        passed orthologGroup element. If the element does not have
-        any TaxRange property tags associated, an empty list is
-        returned."""
-        propTags = cls.getSubNodes("property", element, recursivly=False)
-        res = [t.get('value') for t in propTags if t.get('name') == 'TaxRange']
-        return res
+MAXINT = sys.maxsize
 
 
 class OrthoXMLParser(object):
@@ -82,14 +28,29 @@ class OrthoXMLParser(object):
         self.doc = etree.parse(filename)
         self.root = self.doc.getroot()
         self.tax = None
+        self.singletons = None
 
         self._buildMappings()   # builds three dictionaries - see def below
 
-    def write(self, filename):
-        """Write out the (modified) orthoxml file into a new file."""
-        self.doc.write(filename)
+    def write(self, filename, **kwargs):
+        """Write out the (modified) orthoxml file into a new file.
+        kwargs include:
+            pretty_print=[True/False],
+            xml_declaration=[True/False]
+            encoding=[e.g. 'UTF-8']"""
+        if 'pretty_print' in kwargs:
+            self._remove_whitespace()
+        self.doc.write(filename, **kwargs)
 
-    def mapGeneToXRef(self, id_, typ='geneId'):
+    def _remove_whitespace(self):
+        """Remove whitespace from text and tail fields so that lxml can
+        pretty_print the tree"""
+        for element in self.root.iter():
+            if element.text is not None and element.text.isspace():
+                element.text = None
+            element.tail = None
+
+    def mapGeneToXRef(self, id_, typ='protId'):
         """
         Looks up id_ (integer id_ number as a string) and type in self._xrefs
         dictionary (aka self._xrefs)
@@ -116,7 +77,8 @@ class OrthoXMLParser(object):
     def getGeneIds(self, speciesFilter=None, tag="name"):
         genes = list(self._gene2species.keys())
         if speciesFilter is not None:
-            genes = [g for g in genes if self._gene2species[g].get(tag, None) in speciesFilter]
+            genes = [g for g in genes
+                     if self._gene2species[g].get(tag, None) in speciesFilter]
         return genes
 
     def getToplevelGroups(self):
@@ -134,40 +96,6 @@ class OrthoXMLParser(object):
             root = self.root
 
         return OrthoXMLQuery.getGroupsAtLevel(level, root)
-
-    def getSubFamiliesByRecursion(self, level, root=None, subfamilies=None):
-        """return a forest of orthologGroup nodes with roots at the
-        given taxonomic level or lower. Each node is the topmost
-        matching node - any matching children are not returned, to
-        avoid multiple counting.
-
-        This function requires that the orthologGroup nodes
-        are annotated with a 'property' element with 'TaxRange' as a
-        name and the actual level in a 'value' attribute, and that the
-        value is a '/' joined list of species names. This is not
-        required by the orthoxml schema."""
-
-        if subfamilies is None:
-            subfamilies = []
-
-        if root is None:
-            root = self.root
-
-        # Stopping criterion for matching top-level node
-        if (self.is_ortholog_group(root) and
-                self._is_at_desired_level(root, level)):
-            subfamilies.append(root)
-            return
-
-        # Stopping criterion no children
-        if len(root) == 0:
-            return
-
-        # Recurse on child nodes
-        for child in root.getchildren():
-            self.getSubFamiliesByRecursion(level, child, subfamilies)
-
-        return subfamilies
 
     @classmethod
     def is_ortholog_group(cls, element):
@@ -190,33 +118,6 @@ class OrthoXMLParser(object):
         paralogGroup element."""
         return (cls.is_ortholog_group(element) or
                 cls.is_paralog_group(element))
-
-    def _is_at_desired_level(self, element, querylevel):
-        """Tests if the element is at a taxonomic level equal to or
-        below `querylevel`.
-        If querylevel == "LUCA" -> return True, because necessarily
-        all nodes in the XML are equal to or below LUCA.
-        If element level == "LUCA", but query level is not "LUCA"
-        (which it isn't, because it would have returned True) return
-        false, because the element's level is necessarily above the
-        querylevel.
-        Otherwise, test that the element's level is a subset of
-        querylevel, by splitting the level string on '/' and making
-        a set. NB issubset returns True when sets are equal."""
-
-        if not self.is_ortholog_group(element):
-            raise ElementError('Not an orthologGroup node')
-            # return False
-        if querylevel == 'LUCA':
-            return True
-        if not isinstance(querylevel, set):
-            querylevel = set(querylevel.split('/'))
-        prop = element.find('{http://orthoXML.org/2011/}property')
-        level = prop.get('value')
-        if level == "LUCA":
-            return False
-        level = set(level.split('/'))
-        return level.issubset(querylevel)
 
     def mapGeneToSpecies(self, id_, typ='name'):
         """
@@ -296,16 +197,6 @@ class OrthoXMLParser(object):
         analyzer = LevelAnalysisFactory().newLevelAnalysis(self)
         return FamHistory(self, analyzer)
 
-    def getFamHistoryByRecursion(self, species=None, level=None):
-        # assure that orthologGroup xml elements annotated with an 'og' attr
-        if self.root.find(".//*[@og]") is None:
-            GroupAnnotator(self).annotateDoc()
-
-        famHist = FamHistory(self, species, level)
-        for fam in self.getSubFamiliesByRecursion(level):
-            famHist.addFamily(fam)
-        return famHist
-
     def augmentTaxonomyInfo(self, tax, propagate_top=False):
         """Assign a taxonomy to the orthoxml file. this taxonomy
         is used to augment the xml with the relevant level infos
@@ -321,9 +212,8 @@ class OrthoXMLParser(object):
         self.tax = tax
         GroupAnnotator(self).annotateMissingTaxRanges(tax, propagate_top)
 
-
-class TaxonomyInconsistencyError(Exception):
-    pass
+    def augmentSingletons(self):
+        GroupAnnotator(self).annotateSingletons()
 
 
 class TaxonomyFactory(object):
@@ -342,180 +232,6 @@ class TaxonomyFactory(object):
             raise NotImplementedError("unknown type of Taxonomy")
 
 
-class Taxonomy(object):
-    def __init__(self):
-        raise NotImplementedError("abstract class")
-
-    def iterParents(self, node, stopBefor=None):
-        """iterates over all the taxonomy nodes towards the root
-        which are above 'node' and below 'stopBefor'."""
-
-        if node == stopBefor:
-            return
-        tn = self.hierarchy[node]
-        while tn.up is not None and tn.up.name != stopBefor:
-            tn = tn.up
-            yield tn.name
-
-    def _countParentAmongLevelSet(self, levels):
-        """helper method to count for each level how many levels
-        are parent levels. e.g. (arrow: is-partent-of)
-          A->B->C
-              \>D->E
-        will return A=0,B=1,C=2,D=2,E=3"""
-        levelSet = set(levels)
-        cnts = dict()
-        for lev in levelSet:
-            t = set(self.iterParents(lev)).intersection(levelSet)
-            cnts[lev] = len(t)
-        return cnts
-
-    def mostSpecific(self, levels):
-        """returns the most specific (youngest) level among a set of
-        levels. it is required that all levels are on one monophyletic
-        lineage, otherwise an Exception is raised."""
-        # count who often each element is a child of any other one.
-        # the one with len(levels)-1 is the most specific level
-        cnts = self._countParentAmongLevelSet(levels)
-        for lev, cnt in cnts.items():
-            if cnt == len(levels)-1:
-                return lev
-        raise Exception("Non of the element is subelement of all others")
-
-    def mostGeneralLevel(self, levels):
-        """returns the most general (odest) level among a set of levels."""
-        # count who often each element is a child of any other one.
-        # the one with len(levels)-1 is the most specific level
-        cnts = self._countParentAmongLevelSet(levels)
-        for lev, cnt in cnts.items():
-            if cnt == 0:
-                return lev
-        raise Exception("Non of the element is the root of all others")
-
-    def printSubTreeR(self, fd, lev=None, indent=0):
-        if lev is None:
-            lev = self.root
-        fd.write("{}{}\n".format(" "*2*indent, lev))
-        for child in self.hierarchy[lev].down:
-            self.printSubTreeR(fd, child.name, indent+1)
-
-    def __str__(self):
-        fd = io.StringIO()
-        self.printSubTreeR(fd)
-        res = fd.getvalue()
-        fd.close()
-        return res
-
-
-class XMLTaxonomy(Taxonomy):
-    def __init__(self, filename):
-        raise NotImplementedError("XML Taxonomies have not yet been implemented")
-
-
-class TaxRangeOrthoXMLTaxonomy(Taxonomy):
-    def __init__(self, parser):
-        self.parser = parser
-        self.extractAdjacencies()
-        self.bloat_all()
-        self.extractHierarchy()
-
-    def _parseParentChildRelsR(self, grp):
-        levels = None
-        if OrthoXMLParser.is_ortholog_group(grp):
-            levels = [l.get('value') for l in grp.findall(
-                './{{{ns0}}}property[@name="TaxRange"]'
-                .format(**OrthoXMLParser.ns))]
-        directChildNodes = list(grp)
-        children = [child for child in directChildNodes
-                    if OrthoXMLParser.is_evolutionary_node(child)]
-        geneRefs = [node for node in directChildNodes if OrthoXMLQuery.is_geneRef_node(node)]
-        speciesOfGenes = {self.parser.mapGeneToSpecies(x.get('id')) for x in geneRefs}
-
-        # recursively process childreen nodes
-        subLevs = speciesOfGenes
-        for child in children:
-            subLevs.update(self._parseParentChildRelsR(child))
-
-        if levels is not None:
-            for parent in levels:
-                for child in subLevs:
-                    self.adj.add((parent, child))
-            subLevs = set(levels)
-        return subLevs
-
-    def extractAdjacencies(self):
-        self.adj = set()
-        for grp in self.parser.getToplevelGroups():
-            self._parseParentChildRelsR(grp)
-
-        self.nodes = set(itertools.chain(*self.adj))
-
-    def bloat_all(self):
-        """build transitive closure of all parent - child relations"""
-        while(self.bloat()):
-            pass
-
-    def bloat(self):
-        found = False
-        for pair in itertools.product(self.nodes, repeat=2):
-            first, second = pair
-            for node in self.nodes:
-                if ((pair not in self.adj) and ((first, node) in self.adj) and
-                        ((node, second) in self.adj)):
-                    found = True
-                    self.adj.add(pair)
-        return found
-
-    def extractHierarchy(self):
-        self.hierarchy = dict(zip(self.nodes, map(TaxNode, self.nodes)))
-        for pair in itertools.product(self.nodes, repeat=2):
-            if pair in self.adj:
-                if self.good(pair):
-                    first, second = pair
-                    #print "%s,%s is good" % pair
-                    self.hierarchy[first].addChild(self.hierarchy[second])
-                    self.hierarchy[second].addParent(self.hierarchy[first])
-        noParentNodes = [z for z in self.nodes if self.hierarchy[z].up is None]
-        if len(noParentNodes) != 1:
-            raise TaxonomyInconsistencyError(
-                "Warning: several/none TaxonomyNodes are roots: {}"
-                .format(noParentNodes))
-        self.root = noParentNodes[0]
-
-    def good(self, pair):
-        first, second = pair
-        for node in self.nodes:
-            if (first, node) in self.adj and (node, second) in self.adj:
-                return False
-        return True
-
-
-class TaxNode(object):
-    def __init__(self, name):
-        self.name = name
-        self.up = None
-        self.down = list()
-
-    def addChild(self, c):
-        if not c in self.down:
-            self.down.append(c)
-
-    def addParent(self, p):
-        if self.up is not None and self.up != p:
-            raise TaxonomyInconsistencyError(
-                "Level {} has several parents, at least two: {}, {}"
-                .format(self.name, self.up.name, p.name))
-        self.up = p
-
-    def iterLeaves(self):
-        if len(self.down) == 0:
-            yield self
-        else:
-            for child in self.down:
-                for elem in child.iterLeaves():
-                    yield elem
-
-
 class GeneFamily(object):
     """GeneFamily(root_element)
 
@@ -525,6 +241,29 @@ class GeneFamily(object):
             raise ElementError('Not an orthologGroup node')
         self.root = root_element
 
+    def __repr__(self):
+        return '{} (id#={})'.format(self.__class__.__name__, self.getFamId())
+
+    def __lt__(self, other):
+        return self._cmp() < other._cmp()
+
+    def __gt__(self, other):
+        return self._cmp() > other._cmp()
+
+    def __le__(self, other):
+        return self._cmp() <= other._cmp()
+
+    def __ge__(self, other):
+        return self._cmp() >= other._cmp()
+
+    def __eq__(self, other):
+        return self._cmp() == other._cmp()
+
+    def prefix_match(self, other):
+        query = self._cmp()
+        target = other._cmp()
+        return target[:len(query)] == query
+
     def getMemberGenes(self):
         members = self.root.findall('.//{{{ns0}}}geneRef'.
                                     format(**OrthoXMLParser.ns))
@@ -532,6 +271,22 @@ class GeneFamily(object):
 
     def getFamId(self):
         return self.root.get('og')
+
+    def _cmp(self):
+        """
+        Enable sorting based on LOFT numbering scheme,
+        such that (e.g.)
+            1.1a < 1.1b,
+            1.1b < 1.1c,
+            1.1z < 1.1aa,
+            2 < 10,
+            10 < n/a,
+        """
+        fam = self.getFamId()
+        comp = tuple((0, int(num),) if num else (len(alpha.strip('.')),
+            alpha.strip('.'),) for (num, alpha) in re.findall(r'(\d+)|(\D+)',
+            fam))
+        return comp
 
     def getLevels(self):
         return OrthoXMLQuery.getLevels(self.root)
@@ -545,12 +300,12 @@ class GeneFamily(object):
         subFams = [GeneFamily(fam) for fam in subFamNodes]
         return subFams
 
-    def analyze(self, strategy):
+    def analyze(self, strategy, level):
         """analyze the history of the GeneFamily using the strategy
         passed to the method. The strategy arguement must be an
         object providing a analyzeGeneFam method,
         e.g. a LevelAnalysis object."""
-        self.summary = strategy.analyzeGeneFam(self)
+        self.summary = strategy.analyzeGeneFam(self, level)
 
     def write(self, fd, speciesFilter=None, idFormatter=lambda x: x):
         species = list(self.summary.keys())
@@ -564,6 +319,11 @@ class GeneFamily(object):
             fd.write("{}\t{}\t{}\t{}:{}\n".format(
                 self.getFamId(), spec, len(sumElem.genes),
                 sumElem.typ, refs))
+
+    def is_singleton(self):
+        if not hasattr(self, 'summary'):
+            return False
+        return 'SINGLETON' in {x.typ for x in self.summary.values()}
 
 
 class Singletons(GeneFamily):
@@ -593,13 +353,6 @@ class Singletons(GeneFamily):
             sumElement.typ = "SINGLETON"
 
 
-def enum(*sequential, **named):
-    """creates an Enum type with given values"""
-    enums = dict(zip(sequential, range(len(sequential))), **named)
-    enums['reverse'] = dict((value, key) for key, value in enums.items())
-    return type('Enum', (object, ), enums)
-
-
 class SummaryOfSpecies(object):
     def __init__(self, typ, genes):
         self.typ = typ
@@ -615,17 +368,25 @@ class LevelAnalysisFactory(object):
         the presents/absence of a taxonomy in the parser"""
         if parser.tax is None:
             return BasicLevelAnalysis(parser)
-        else:
+        elif parser.singletons is None:
             return TaxAwareLevelAnalysis(parser, parser.tax)
+        else:
+            return SingletonAwareLevelAnalysis(parser,
+                                               parser.tax,
+                                               parser.singletons)
 
 
 class BasicLevelAnalysis(object):
-    GeneClasses = enum("MULTICOPY", "SINGLECOPY", "ANCIENT_BUT_LOST", "LATER_GAINED", "SINGLETON")
+    GeneClasses = enum("MULTICOPY",
+                       "SINGLECOPY",
+                       "ANCIENT_BUT_LOST",
+                       "LATER_GAINED",
+                       "SINGLETON")
 
     def __init__(self, parser):
         self.parser = parser
 
-    def analyzeGeneFam(self, fam):
+    def analyzeGeneFam(self, fam, level=None):
         """analyzes a single gene family and returns a summary dict.
 
         This method classifies all genes in the family depending on
@@ -639,8 +400,12 @@ class BasicLevelAnalysis(object):
         summary = dict()
         for spec in iter(spec2genes.keys()):
             nrMemb = len(spec2genes[spec])
-            gclass = self.GeneClasses.MULTICOPY if nrMemb > 1 else self.GeneClasses.SINGLECOPY
-            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass], spec2genes[spec])
+            gclass = (self.GeneClasses.MULTICOPY
+                        if nrMemb > 1
+                        else self.GeneClasses.SINGLECOPY)
+
+            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
+                                             spec2genes[spec])
         return summary
 
 
@@ -649,8 +414,24 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         super().__init__(parser)
         self.tax = tax
 
-    def analyzeGeneFam(self, fam):
-        """analyzes a singel gene family in the context of a known
+    def addLosses(self, fam, summary, level):
+        lev = fam.getLevels()
+        if lev is not None:
+            # if several levels exist at this node, use oldest one
+            # that is not older than `level'
+            lev = self.tax.younger_than_filter(lev, level)
+            mostGeneralLevel = self.tax.mostGeneralLevel(lev)
+            speciesCoveredByLevel = {
+                l.name for l in
+                self.tax.hierarchy[mostGeneralLevel].iter_leaves()
+            }
+
+            lostSpecies = speciesCoveredByLevel.difference(summary.keys())
+            for lost in lostSpecies:
+                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
+
+    def analyzeGeneFam(self, fam, level):
+        """analyzes a single gene family in the context of a known
         taxonomic tree.
 
         in addition to the method defined in the base class, this
@@ -658,16 +439,42 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
         checking whether a species within the taxonomic range of
         the family contains a copy of the gene. if not, it had
         been lost."""
-        summary = super().analyzeGeneFam(fam)
-        lev = fam.getLevels()
-        if lev is not None:
-            # if several levels exist at this node, use oldest one
-            mostGeneralLevel = self.tax.mostGeneralLevel(lev)
-            speciesCoveredByLevel = {l.name for l in
-                                     self.tax.hierarchy[mostGeneralLevel].iterLeaves()}
-            lostSpecies = speciesCoveredByLevel.difference(summary.keys())
-            for lost in lostSpecies:
-                summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
+        summary = super().analyzeGeneFam(fam, level)
+        self.addLosses(fam, summary, level)
+        return summary
+
+
+class SingletonAwareLevelAnalysis(TaxAwareLevelAnalysis):
+    def __init__(self, parser, tax, singletons):
+        super().__init__(parser, tax)
+        self.singletons = singletons
+
+    def analyzeGeneFam(self, fam, level):
+        """analyzes a single gene family and returns a summary dict.
+
+        This method classifies all genes in the family depending on
+        the number of copies per genome into MULTICOPY or SINGLECOPY
+        genes."""
+
+        spec2genes = collections.defaultdict(set)
+        for geneId in fam.getMemberGenes():
+            spec = self.parser.mapGeneToSpecies(geneId)
+            spec2genes[spec].add(geneId)
+        summary = dict()
+        for spec in iter(spec2genes.keys()):
+            nrMemb = len(spec2genes[spec])
+            if nrMemb > 1:
+                gclass = self.GeneClasses.MULTICOPY
+            else:
+                if fam.getFamId() in self.parser.singletons:
+                    gclass = self.GeneClasses.SINGLETON
+                else:
+                    gclass = self.GeneClasses.SINGLECOPY
+
+            summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
+                                             spec2genes[spec])
+
+        self.addLosses(fam, summary, level)
         return summary
 
 
@@ -677,6 +484,24 @@ class FamHistory(object):
     def __init__(self, parser, analyzer):
         self.parser = parser
         self.analyzer = analyzer
+        self._geneFamList = list()
+
+    def __len__(self):
+        return self.get_number_of_fams(singletons=True)
+
+    def __getitem__(self, key):
+        return self.geneFamDict[key]
+
+    def __iter__(self):
+        return iter(self.geneFamList)
+
+    @property
+    def geneFamList(self):
+        return self._geneFamList
+
+    @geneFamList.setter
+    def geneFamList(self, gfam_list):
+        self._geneFamList = sorted(gfam_list)
 
     def setXRefTag(self, tag):
         """set the attribute name of the 'gene' elements which should
@@ -685,30 +510,14 @@ class FamHistory(object):
         self.XRefTag = tag
 
     def analyzeLevel(self, level):
-        gfamList = list()
-        for fam in self.parser.getToplevelGroups():
-            gfamList.extend(GeneFamily(fam).analyzeLevel(level))
+        subFamNodes = OrthoXMLQuery.getGroupsAtLevel(level, self.parser.root)
+        gfamList = [GeneFamily(fam) for fam in subFamNodes]
 
-        gene2FamIdx = dict()
-        specInTaxRange = set()
-        for idx, gfam in enumerate(gfamList):
-            gfam.analyze(self.analyzer)
-            specInTaxRange.update(gfam.summary.keys())
-            for mem in gfam.getMemberGenes():
-                gene2FamIdx[mem] = idx
-        # get genes in taxrange not belonging to any family. those are
-        # considered to be singletons and added to a special GeneFamily.
-        allGenesInRange = self.parser.getGeneIds(speciesFilter=specInTaxRange)
-        singletonsSet = set(allGenesInRange).difference(gene2FamIdx.keys())
-        singletons = Singletons(singletonsSet)
-        singletons.analyze(self.analyzer)
+        for gfam in gfamList:
+            gfam.analyze(self.analyzer, level)
 
-        gfamList.append(singletons)
-        for singleton in singletonsSet:
-            gene2FamIdx[singleton] = len(gfamList)-1
-
+        self.geneFamDict = {gf.getFamId(): gf for gf in gfamList}
         self.geneFamList = gfamList
-        self.gene2FamIdx = gene2FamIdx
         self.analyzedLevel = level
 
     def write(self, fd, speciesFilter=None):
@@ -719,10 +528,10 @@ class FamHistory(object):
         species names for which the genes in the families are
         reported."""
 
+        formatter = lambda gid: self.parser.mapGeneToXRef(gid, self.XRefTag)
         fd.write("FamilyAnalysis at {}\n".format(self.analyzedLevel))
-        for fam in self.geneFamList:
-            fam.write(fd, speciesFilter,
-                      idFormatter=lambda gid: self.parser.mapGeneToXRef(gid, self.XRefTag))
+        for fam in self:
+            fam.write(fd, speciesFilter, idFormatter=formatter)
 
     def __str__(self):
         fd = io.StringIO()
@@ -731,57 +540,149 @@ class FamHistory(object):
         fd.close()
         return res
 
-    def _find_subfamilies(self, query, targetlist):
-        """ Used in compare method - fixes s.startswith bug where
-        queries such as '20' would return subfamilies '200', '2000', etc.
-        Now '20' will only return subfamilies of the form '20.1a', 20.1b.2c.3e',
-        etc. """
-        result = []
-        q = query.split('.')   # e.g. 8.1b.2a -> ['8', '1b', '2a']
-
-        for family in targetlist:
-            name_elements = family.split('.')
-            if name_elements[:len(q)] == q:  # exact prefix match to query
-                result.append(family)
-
-        return result
-
     def compare(self, other):
-        """compares two FamilyHistory objects.
+        """ compares two FamilyHistory objects in linear time
+            algorithm implemented in Comparer class
+        """
+        c = Comparer(self, other)
+        c.run()
+        return c.comp
 
-        The two FamilyHistory objects are meant to operate on the same
-        dataset, but on different taxonomic levels. It compares all
-        families with respect to these two levels and clusters them
-        according to whether they are
-         - identical (no duplication/loss on the lineage between the
-           two levels
-         - duplications (old family duplicated along the lineage into
-           two or more subfamilies)
-         - novel families (did not exist at older level)
+    def get_number_of_fams(self, singletons=False):
+        if singletons:
+            return len(self.geneFamList)
+        return len([x for x in self if not x.is_singleton()])
 
-        It is expected that the 'other' family object corresponds to
-        the younger taxonomic level, but this is not enforced. """
 
-        famIds = [gfam.getFamId() for gfam in self.geneFamList]
-        otherfamIds = [gfam.getFamId() for gfam in other.geneFamList]
-        comp = LevelComparisonResult(self.analyzedLevel, other.analyzedLevel)
-        for f in famIds:
-            if f == "n/a":
-                continue
-            if f in otherfamIds:
-                comp.addFamily(FamIdent(f))
+class Comparer(object):
+    """
+    Compares two FamilyHistory objects in linear time.
+
+    Algorithm:
+
+    Init:
+    preprocess input by sorting FamilyHistory geneFamLists
+    maintain pointers to the lists that only move forwards
+
+    Run:
+    If families exactly match:
+        Mark as FamIdent
+        advance both lists one element
+    Else if family2 is a prefix match of family 1:
+        While family1.prefix_match(family2):
+            Mark as FamDupl
+            advance list 2
+        advance list 1
+    Else if family 1 < family 2 (according to sort comparison)
+        While family 1 < family 2:
+            Mark as FamLost
+            advance list 1
+    Else if family 1 > family 2
+        While family 1 > family 2:
+            Mark as FamNovel
+            advance list 2
+    When list 1 is exhausted:
+        mark all remaining members of list 2 as FamNovel
+    When list 2 is exhausted:
+        mark all remaining members of list 1 as FamLost
+
+    End:
+    When both lists are exhausted
+    """
+
+    def __init__(self, fam_history_1, fam_history_2):
+        self.i1 = iter(fam_history_1.geneFamList)
+        self.i2 = iter(fam_history_2.geneFamList)
+        self.f1 = None
+        self.f2 = None
+        self.advance_i1()
+        self.advance_i2()
+        self.comp = LevelComparisonResult(fam_history_1.analyzedLevel,
+            fam_history_2.analyzedLevel)
+
+    def run(self):
+        while self.f1 is not None and self.f2 is not None:
+            if self.f1 == self.f2:
+                self.ident()
+
+            elif self.f1.prefix_match(self.f2):
+                self.dupl()
+
+            elif self.f1 < self.f2:
+                self.lost()
+
+            elif self.f1 > self.f2:
+                self.novel()
+
             else:
-                subfam = self._find_subfamilies(f, otherfamIds)
-                if len(subfam) == 0:
-                    comp.addFamily(FamLost(f))
-                else:
-                    comp.addFamily(FamDupl(f, "; ".join(subfam)))
-        for f in otherfamIds:
-            topId = f.split('.')[0]
-            pattern = re.compile(r"{}(.|$)".format(topId))
-            if not any(map(lambda x: pattern.match(x) is not None, famIds)):
-                comp.addFamily(FamNovel(f))
-        return comp
+                raise Exception('Unexpected state')
+
+        if self.f1 is None:
+            self.l1_exhausted()
+
+        if self.f2 is None:
+            self.l2_exhausted()
+
+    def ident(self):
+        self.comp.addFamily(FamIdent(self.f1.getFamId()))
+        self.advance_i1()
+        self.advance_i2()
+
+    def dupl(self):
+        m = list()
+        while self.f1.prefix_match(self.f2):
+            m.append(self.f2)
+            self.advance_i2()
+            if self.f2 is None:
+                break
+        self.comp.addFamily(FamDupl(self.f1.getFamId(),
+            '; '.join(gf.getFamId() for gf in m)))
+        self.advance_i1()
+
+    def lost(self):
+        while self.f1 < self.f2 and not self.f1.prefix_match(self.f2):
+            self.comp.addFamily(FamLost(self.f1.getFamId()))
+            self.advance_i1()
+            if self.f1 is None:
+                break
+
+    def novel(self):
+        while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
+            _Event = (FamSingleton if self.f2.is_singleton()
+                      else FamNovel) # this check is probably redundant
+                                     # because there shouldn't be any
+                                     # singletons if l1 is not exhausted
+                                     # (singletons are always annotated last)
+            self.comp.addFamily(_Event(self.f2.getFamId()))
+            self.advance_i2()
+            if self.f2 is None:
+                break
+
+    def advance_i1(self):
+        try:
+            val = next(self.i1)
+        except StopIteration:
+            val = None
+        self.f1 = val
+
+    def advance_i2(self):
+        try:
+            val = next(self.i2)
+        except StopIteration:
+            val = None
+        self.f2 = val
+
+    def l1_exhausted(self):
+        while self.f2 is not None:
+            _Event = (FamSingleton if self.f2.is_singleton()
+                      else FamNovel)
+            self.comp.addFamily(_Event(self.f2.getFamId()))
+            self.advance_i2()
+
+    def l2_exhausted(self):
+        while self.f1 is not None:
+            self.comp.addFamily(FamLost(self.f1.getFamId()))
+            self.advance_i1()
 
 
 class FamEvent(object):
@@ -809,6 +710,12 @@ class FamLost(FamEvent):
     event = "lost"
 
 
+class FamSingleton(FamEvent):
+    """A single-member 'family' consisting of a gene that doesn't
+    match any other family. Only occurs in a leaf."""
+    event = "singleton"
+
+
 class FamDupl(FamEvent):
     event = "duplicated"
 
@@ -826,20 +733,100 @@ class FamDupl(FamEvent):
 
 
 class LevelComparisonResult(object):
+
+    """
+    Result of comparing two 'FamHistory' objects at different levels
+    on the tree.
+
+    """
+
+    groups = { 'identical': 0,
+               'duplicated': 1,
+               'lost': 2,
+               'novel': 3,
+               'singleton': 4}
+
+    groups_back = {0: 'identical',
+                   1: 'duplicated',
+                   2: 'lost',
+                   3: 'novel',
+                   4: 'singleton'}
+
+    @staticmethod
+    def sort_key(item):
+        if item.fam == 'n/a':
+            return (MAXINT,)
+        return tuple((int(num) if num else alpha) for
+                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam))
+
+    def group_sort_key(self, item):
+        return tuple(itertools.chain((self.group_key(item),),
+                                     self.sort_key(item)))
+
+    def group_key(self, item):
+        return self.groups[item.event]
+
     def __init__(self, lev1, lev2):
-        self.fams = list()
+        self.fams_dict = dict()
         self.lev1 = lev1
         self.lev2 = lev2
 
+    def __str__(self):
+        fd = io.StringIO()
+        self.write(fd)
+        res = fd.getvalue()
+        fd.close()
+        return res
+
+    def __getitem__(self, key):
+        return self.fams_dict[key]
+
+    def __iter__(self):
+        return iter(self.fams)
+
+    @property
+    def fams(self):
+        return sorted(self.fams_dict.values(), key=self.sort_key)
+
     def addFamily(self, famEvent):
-        self.fams.append(famEvent)
+        self.fams_dict[famEvent.fam] = famEvent
 
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
                  format(self.lev1, self.lev2))
-        self.fams.sort(key=lambda x: x.fam)
-        for fam in self.fams:
+        for fam in self:
             fd.writelines(str(fam))
+
+    def summarise(self):
+        summary = {'identical': 0,
+                   'novel': 0,
+                   'lost': 0,
+                   'duplicated': 0,
+                   'singleton': 0}
+
+        for family in self.fams_dict.values():
+            if family.event in ['identical', 'lost', 'singleton', 'novel']:
+                summary[family.event] += 1
+            elif family.event == 'duplicated':
+                summary['duplicated'] += len(family.into.split('; '))
+
+        self.summary = summary
+        return summary
+
+    def filter(self, filters):
+        if isinstance(filters, str):
+            filters = {filters}
+        if not filters.issubset({'identical', 'lost', 'singleton', 'novel',
+                                 'duplicated'}):
+            raise Exception('Unexpected filters: {0}'.format(filters))
+        return [x for x in self if x.event in filters]
+
+    def group_fams(self):
+        return dict([(self.groups_back[num], list(iterator))
+                     for (num, iterator)
+                     in itertools.groupby(sorted(self.fams_dict.values(),
+                                                 key=self.group_sort_key),
+                                          self.group_key)])
 
 
 class GroupAnnotator(object):
@@ -902,11 +889,15 @@ class GroupAnnotator(object):
             if noUpwardLevels:
                 levelsToParent = set()
             else:
-                levelsToParent = {l for l in self.tax.iterParents(mostSpecificLevel, last)}
+                levelsToParent = {l for l in
+                                  self.tax.iterParents(mostSpecificLevel,
+                                                       last)}
                 levelsToParent.add(mostSpecificLevel)
                 if not levels.issubset(levelsToParent):
-                    raise Exception("taxonomy not in correspondance with found hierarchy: {} vs {}"
-                                    .format(levels, levelsToParent))
+                    raise Exception("taxonomy not in correspondance with found"
+                                    " hierarchy: {} vs {}".format(
+                                                                levels,
+                                                                levelsToParent))
             addLevels = levelsToParent - levels
             for lev in addLevels:
                 node.append(self._createTaxRangeTag(lev))
@@ -934,7 +925,7 @@ class GroupAnnotator(object):
         pos = parent.index(child)
         el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
         el.append(self._createTaxRangeTag(specificLev))
-        for lev in self.tax.iterParents(specificLev, stopBefor=beforeLev):
+        for lev in self.tax.iterParents(specificLev, stopBefore=beforeLev):
             el.append(self._createTaxRangeTag(lev))
         el.append(child)
         parent.insert(pos, el)
@@ -950,8 +941,24 @@ class GroupAnnotator(object):
         level and the current nodes level. If no parent exists, all
         tax-levels above the current one are used."""
         self.tax = tax
-        for fam in self.parser.getToplevelGroups():
+
+        top_level_groups = self.parser.getToplevelGroups()
+
+        if PROGRESSBAR:
+            pbar = setup_progressbar(
+                'Adding missing taxonomy annotation: ',
+                len(top_level_groups)
+                )
+            pbar.start()
+
+        for i, fam in enumerate(top_level_groups, start=1):
             self._addTaxRangeR(fam, noUpwardLevels=not propagate_top)
+            if PROGRESSBAR:
+                pbar.update(i)
+
+        if PROGRESSBAR:
+            pbar.finish()
+
         del self.tax
 
     def annotateDoc(self):
@@ -960,78 +967,43 @@ class GroupAnnotator(object):
             self.dupCnt = list()
             self._annotateGroupR(fam, fam.get('id', str(i)))
 
+    def annotateSingletons(self):
+        """Any input genes that aren't assigned to ortholog groups are
+        singletons, which are added to the xml as extra ortholog groups"""
+        if PROGRESSBAR:
+            pbar = setup_progressbar('Adding singletons: ', 1)
+            pbar.start()
 
-if __name__ == "__main__":
-    import argparse
-    import sys
+        highest_group = max(self.parser.getToplevelGroups(),
+                            key=lambda x: int(x.get('id')))
+        input_genes = set(n.get('id') for n in
+                          OrthoXMLQuery.getInputGenes(self.parser.root))
+        grouped_genes = set(n.get('id') for n in
+                            OrthoXMLQuery.getGroupedGenes(self.parser.root))
+        singletons = input_genes - grouped_genes
+        groups_node = OrthoXMLQuery.getSubNodes('groups', self.parser.root)[0]
 
-    parser = argparse.ArgumentParser(description='Analyze Hierarchical OrthoXML families.')
-    parser.add_argument('--xreftag', default=None, help='xref tag of genes to report')
-    parser.add_argument('--show_levels', action='store_true',
-                        help='show available levels and species and quit')
-    parser.add_argument('-r', '--use-recursion', action='store_true',
-                        help="Use recursion to sample families that are a subset of the query")
-    parser.add_argument('--taxonomy', default='implicit',
-                        help=("Taxonomy used to reconstruct intermediate levels. "
-                              "Has to be either 'implicit' (default) or a path to "
-                              "a file. If set to 'implicit', the taxonomy is extracted "
-                              "from the input OrthoXML file"))
-    parser.add_argument('--propagate_top', action='store_true',
-                        help=("propagate taxonomy levels up to the toplevel. If "
-                              "not set, only intermediate levels are propagated."))
-    parser.add_argument('--show_taxonomy', action='store_true',
-                        help='show taxonomy used to infer missing levels')
-    parser.add_argument('--store_augmented_xml', default=None,
-                        help=("if set to a filename, the input orthoxml file with "
-                              "augmented annotations is written"))
-    parser.add_argument('--compare_second_level', default=None,
-                        help='compare secondary level with primary one')
-    parser.add_argument('path', help='path to orthoxml file')
-    parser.add_argument('level', help='taxonomic level at which analysis should be done')
-    parser.add_argument('species', nargs="+", help='(list of) species to be analyzed')
-    args = parser.parse_args()
+        fam_num = int(highest_group.get('id')) + 1
+        singleton_families = set()
 
-    op = OrthoXMLParser(args.path)
-    if args.show_levels:
-        print("Species:\n{0}\n\nLevels:\n{1}".format(
-              '\n'.join(sorted(list(op.getSpeciesSet()))),
-              '\n'.join(sorted(op.getLevels()))))
-        sys.exit()
-    print("Analyzing {} on taxlevel {}".format(args.path, args.level))
-    print("Species found:")
-    print("; ".join(op.getSpeciesSet()))
-    print("--> analyzing " + "; ".join(args.species))
+        if PROGRESSBAR:
+            pbar.maxval = len(singletons)
 
-    if args.taxonomy == "implicit":
-        tax = TaxonomyFactory.newTaxonomy(op)
-    else:
-        from newick import NewickTaxonomy
-        tax = TaxonomyFactory.newTaxonomy(args.taxonomy)
-        if isinstance(tax, NewickTaxonomy):
-            tax.annotate_from_orthoxml(op)
+        for i, gene in enumerate(singletons, start=1):
+            singleton_families.add(str(fam_num))
+            species = self.parser.mapGeneToSpecies(gene)
+            new_node = etree.Element('{{{ns0}}}orthologGroup'.format(
+                                                            **self.parser.ns),
+                                                            id=str(fam_num))
+            new_node.append(self._createTaxRangeTag(species))
+            new_node.append(etree.Element('{{{ns0}}}geneRef'.format(
+                                                            **self.parser.ns),
+                                                            id=gene))
+            groups_node.append(new_node)
+            fam_num += 1
+            if PROGRESSBAR:
+                pbar.update(i)
 
-    if args.show_taxonomy:
-        print("Use following taxonomy")
-        print(tax)
-
-    # add taxonomy to parser
-    op.augmentTaxonomyInfo(tax, args.propagate_top)
-
-    if args.use_recursion:
-        hist = op.getFamHistoryByRecursion(args.species, args.level)
-    else:
-        hist = op.getFamHistory()
-        hist.analyzeLevel(args.level)
-    if args.compare_second_level is None:
-        hist.setXRefTag(args.xreftag)
-        hist.write(sys.stdout, speciesFilter=args.species)
-    else:
-        hist2 = op.getFamHistory()
-        hist2.analyzeLevel(args.compare_second_level)
-        print("Comparing taxlevel {}\n to taxlevel {}".format(
-            args.level, args.compare_second_level))
-        comp = hist.compare(hist2)
-        comp.write(sys.stdout)
-
-    if args.store_augmented_xml is not None:
-        op.write(args.store_augmented_xml)
+        self.parser.singletons = singleton_families
+        if PROGRESSBAR:
+            pbar.finish()
