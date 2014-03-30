@@ -831,8 +831,8 @@ class LevelComparisonResult(object):
         return summary
 
     def filter(self, filters):
-        if isinstance(filters, basestring):
-            filters = set([filters])
+        if not isinstance(filters, set):
+            filters = {filters}
         if not filters.issubset({'identical', 'lost', 'singleton', 'novel',
                                  'duplicated'}):
             raise Exception('Unexpected filters: {0}'.format(filters))
