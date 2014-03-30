@@ -9,6 +9,6 @@ setup(
     author_email='adrian.altenhoff@inf.ethz.ch',
     description='todoc',
     packages=find_packages(),
-    install_requires=['lxml', 'progressbar-latest'],
+    install_requires=['lxml', 'progressbar-latest', 'future'],
     scripts=['bin/familyanalyzer']
 )

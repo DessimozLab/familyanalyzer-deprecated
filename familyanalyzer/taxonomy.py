@@ -1,10 +1,25 @@
-from functools import reduce
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future.builtins import range
+from future.builtins import next
+from future.builtins import dict
+from future.builtins import zip
+from future.builtins import open
+from future.builtins import map
+from future.builtins import str
+from future import standard_library
+standard_library.install_hooks()
+
 import copy
 import io
 import itertools
-from collections import deque
 import os
 import re
+from collections import deque
+from functools import reduce
+
 from .orthoxmlquery import OrthoXMLQuery
 from .newick import NewickLexer, Streamer
 from .tools import PROGRESSBAR, setup_progressbar

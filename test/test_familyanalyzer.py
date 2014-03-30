@@ -1,7 +1,18 @@
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future.builtins import range
+from future.builtins import dict
+from future.builtins import int
+from future import standard_library
+standard_library.install_hooks()
+
 import unittest
 import familyanalyzer as fa
 fa.PROGRESSBAR = False
 fa.familyanalyzer.PROGRESSBAR = False
+
 
 class SetupHelper(object):
     @staticmethod
@@ -189,6 +200,7 @@ class GeneFamilyTest(unittest.TestCase):
 class TwoLineageComparisons(unittest.TestCase):
     """tests the ability to compare the orthoxml at two
     lineages."""
+    maxDiff = None
 
     def getFamHistory(self, parser, level):
         hist = parser.getFamHistory()
@@ -203,24 +215,125 @@ class TwoLineageComparisons(unittest.TestCase):
         hist2 = self.getFamHistory(parser, lev2)
         return hist1.compare(hist2)
 
-    def test_Levels(self):
-        levPairs = [("Mammalia", "Primates"),
-                    ("Vertebrata", "Euarchontoglires"),
-                    ("Euarchontoglires", "Rodents"),
-                    ("Vertebrata", "HUMAN"),
-                    ("Primates", "PANTR"),
-                    ("Primates", "HUMAN")]
-        expRes = [[fa.FamIdent('1'), fa.FamIdent("2"), fa.FamDupl("3", ["3.1a", "3.1b"])],
-                  [fa.FamIdent("1"), fa.FamNovel("2"), fa.FamDupl("3", ["3.1a", "3.1b"])],
-                  [fa.FamIdent("1"), fa.FamIdent("2"), fa.FamIdent("3.1a"), fa.FamIdent("3.1b")],
-                  [fa.FamIdent("1"), fa.FamNovel("2"), fa.FamDupl("3", "3.1a")],
-                  [fa.FamIdent("1"), fa.FamIdent("2"), fa.FamIdent("3.1a"), fa.FamIdent("3.1b")],
-                  [fa.FamIdent("1"), fa.FamIdent("2"), fa.FamIdent("3.1a"), fa.FamLost("3.1b")]]
+    def compareLevelsSingletonAware(self, lev1, lev2):
+        parser = SetupHelper.createOrthoXMLParserFromSimpleEx()
+        tax = fa.TaxonomyFactory.newTaxonomy(parser)
+        parser.augmentTaxonomyInfo(tax)
+        parser.augmentSingletons()
+        hist1 = self.getFamHistory(parser, lev1)
+        hist2 = self.getFamHistory(parser, lev2)
+        return hist1.compare(hist2)
+
+    def test_levels(self):
+        levPairs = [('Mammalia', 'Primates'),
+                    ('Vertebrata', 'Euarchontoglires'),
+                    ('Euarchontoglires', 'Rodents'),
+                    ('Vertebrata', 'HUMAN'),
+                    ('Primates', 'PANTR'),
+                    ('Primates', 'HUMAN')]
+        expRes = [[fa.FamIdent('1'), fa.FamIdent('2'), fa.FamDupl('3', ['3.1a', '3.1b'])],
+                  [fa.FamIdent('1'), fa.FamNovel('2'), fa.FamDupl('3', ['3.1a', '3.1b'])],
+                  [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                  [fa.FamIdent('1'), fa.FamNovel('2'), fa.FamDupl('3', '3.1a')],
+                  [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                  [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamLost('3.1b')]]
         for i in range(len(levPairs)):
             lev1, lev2 = levPairs[i]
             comp = self.compareLevels(lev1, lev2)
             comp.fams.sort(key=lambda x: x.fam)
-            self.assertListEqual(comp.fams, expRes[i], "failed for {} vs {}".format(lev1, lev2))
+            self.assertListEqual(comp.fams, expRes[i], 'failed for {} vs {}'.format(lev1, lev2))
+
+    def test_summarise(self):
+        levPairs = [('Mammalia', 'Primates'),
+                    ('Vertebrata', 'Euarchontoglires'),
+                    ('Euarchontoglires', 'Rodents'),
+                    ('Vertebrata', 'HUMAN'),
+                    ('Primates', 'PANTR'),
+                    ('Primates', 'HUMAN')]
+        expRes = [{u'identical': 2, u'novel': 0, u'lost': 0, u'duplicated': 2, u'singleton': 0},
+                  {u'identical': 1, u'novel': 1, u'lost': 0, u'duplicated': 2, u'singleton': 0},
+                  {u'identical': 4, u'novel': 0, u'lost': 0, u'duplicated': 0, u'singleton': 0},
+                  {u'identical': 1, u'novel': 1, u'lost': 0, u'duplicated': 1, u'singleton': 0},
+                  {u'identical': 4, u'novel': 0, u'lost': 0, u'duplicated': 0, u'singleton': 0},
+                  {u'identical': 3, u'novel': 0, u'lost': 1, u'duplicated': 0, u'singleton': 0}]
+        for i in range(len(levPairs)):
+            lev1, lev2 = levPairs[i]
+            comp = self.compareLevels(lev1, lev2)
+            summary = comp.summarise()
+            self.assertDictEqual(summary, expRes[i], 'failed for {} vs {}'.format(lev1, lev2))
+
+    def test_levels_singleton_aware(self):
+        levPairs = [('Mammalia', 'Primates'),
+                    ('Vertebrata', 'Euarchontoglires'),
+                    ('Euarchontoglires', 'Rodents'),
+                    ('Vertebrata', 'HUMAN'),
+                    ('Primates', 'PANTR'),
+                    ('Primates', 'HUMAN')]
+        expRes = [[fa.FamIdent('1'), fa.FamIdent('2'), fa.FamDupl('3', ['3.1a', '3.1b'])],
+                  [fa.FamIdent('1'), fa.FamNovel('2'), fa.FamDupl('3', ['3.1a', '3.1b'])],
+                  [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                  [fa.FamIdent('1'), fa.FamNovel('2'), fa.FamDupl('3', '3.1a'), fa.FamSingleton('5')],
+                  [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                  [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamLost('3.1b'), fa.FamSingleton('5')]]
+        for i in range(len(levPairs)):
+            lev1, lev2 = levPairs[i]
+            comp = self.compareLevelsSingletonAware(lev1, lev2)
+            comp.fams.sort(key=lambda x: x.fam)
+            self.assertListEqual(comp.fams, expRes[i], 'failed for {} vs {}'.format(lev1, lev2))
+
+    def test_summarise_singleton_aware(self):
+        levPairs = [('Mammalia', 'Primates'),
+                    ('Vertebrata', 'Euarchontoglires'),
+                    ('Euarchontoglires', 'Rodents'),
+                    ('Vertebrata', 'HUMAN'),
+                    ('Primates', 'PANTR'),
+                    ('Primates', 'HUMAN')]
+        expRes = [{u'identical': 2, u'singleton': 0, u'novel': 0, u'lost': 0, u'duplicated': 2},
+                  {u'identical': 1, u'singleton': 0, u'novel': 1, u'lost': 0, u'duplicated': 2},
+                  {u'identical': 4, u'singleton': 0, u'novel': 0, u'lost': 0, u'duplicated': 0},
+                  {u'identical': 1, u'singleton': 1, u'novel': 1, u'lost': 0, u'duplicated': 1},
+                  {u'identical': 4, u'singleton': 0, u'novel': 0, u'lost': 0, u'duplicated': 0},
+                  {u'identical': 3, u'singleton': 1, u'novel': 0, u'lost': 1, u'duplicated': 0}]
+        for i in range(len(levPairs)):
+            lev1, lev2 = levPairs[i]
+            comp = self.compareLevelsSingletonAware(lev1, lev2)
+            summary = comp.summarise()
+            self.assertDictEqual(summary, expRes[i], 'failed for {} vs {}'.format(lev1, lev2))
+
+    def test_filter(self):
+        levPairs = [('Mammalia', 'Primates'),
+                    ('Vertebrata', 'Euarchontoglires'),
+                    ('Euarchontoglires', 'Rodents'),
+                    ('Vertebrata', 'HUMAN'),
+                    ('Primates', 'PANTR'),
+                    ('Primates', 'HUMAN')]
+        expRes = [
+                  [
+                   [fa.FamIdent('1'), fa.FamIdent('2')],
+                   [fa.FamIdent('1')],
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                   [fa.FamIdent('1')],
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a')]
+                  ],
+                  [
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamDupl('3', ['3.1a', '3.1b'])],
+                   [fa.FamIdent('1'), fa.FamNovel('2'), fa.FamDupl('3', ['3.1a', '3.1b'])],
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                   [fa.FamIdent('1'), fa.FamNovel('2'), fa.FamDupl('3', '3.1a'), fa.FamSingleton('5')],
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamIdent('3.1b')],
+                   [fa.FamIdent('1'), fa.FamIdent('2'), fa.FamIdent('3.1a'), fa.FamLost('3.1b'), fa.FamSingleton('5')]
+                  ]
+                 ]
+        filters = ['identical', {'identical', 'lost', 'singleton', 'novel', 'duplicated'}]
+        res = [ [], [] ]
+        for i in range(len(levPairs)):
+            lev1, lev2 = levPairs[i]
+            comp = self.compareLevelsSingletonAware(lev1, lev2)
+            for j in range(len(filters)):
+                fams = comp.filter(filters[j])
+                res[j].append(fams)
+                self.assertListEqual(res[j][i], expRes[j][i], "failed for {} vs {}".format(lev1, lev2))
 
 
 class TaxonomyFactoryTest(unittest.TestCase):
