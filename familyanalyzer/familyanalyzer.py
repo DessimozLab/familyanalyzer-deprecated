@@ -1,3 +1,17 @@
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future.builtins import super
+from future.builtins import next
+from future.builtins import chr
+from future.builtins import dict
+from future.builtins import int
+from future.builtins import str
+from future import standard_library
+standard_library.install_hooks()
+
+
 #!/usr/bin/env python
 #
 #  This scripts has the purpose of analyzing an orthoXML file.
@@ -697,6 +711,9 @@ class FamEvent(object):
     def __eq__(self, other):
         return self.fam == other.fam and self.event == other.event
 
+    def __repr__(self):
+        return "{}: {}".format(self.fam, self.event)
+
 
 class FamIdent(FamEvent):
     event = "identical"
@@ -814,8 +831,8 @@ class LevelComparisonResult(object):
         return summary
 
     def filter(self, filters):
-        if isinstance(filters, str):
-            filters = {filters}
+        if isinstance(filters, basestring):
+            filters = set([filters])
         if not filters.issubset({'identical', 'lost', 'singleton', 'novel',
                                  'duplicated'}):
             raise Exception('Unexpected filters: {0}'.format(filters))
@@ -989,7 +1006,7 @@ class GroupAnnotator(object):
         if PROGRESSBAR:
             pbar.maxval = len(singletons)
 
-        for i, gene in enumerate(singletons, start=1):
+        for i, gene in enumerate(sorted(singletons), start=1):
             singleton_families.add(str(fam_num))
             species = self.parser.mapGeneToSpecies(gene)
             new_node = etree.Element('{{{ns0}}}orthologGroup'.format(
