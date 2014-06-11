@@ -533,17 +533,19 @@ class TaxNode(object):
 
 class NewickTaxonomy(Taxonomy):
 
-    """ Create a taxonomy from a file in newick format. The file should contain
-    one tree (further trees are ignored). Only the tree topology is used -
-    branch lengths and bootstrap support values are thown away.
-    The leaf labels should match those in the orthoXML. Inner labels
-    should match too, but for OMA XML will be automatically generated if
-    auto_annotate == True """
+    """ Create a taxonomy from a file or filehandle in newick format. The
+    file should contain one tree (further trees are ignored). Only the
+    tree topology is used - branch lengths and bootstrap support values
+    are thown away. The leaf labels should match those in the orthoXML.
+    Inner labels should match too, but for OMA XML will be automatically
+    generated if auto_annotate == True """
 
-    def __init__(self, filename):
-        if not os.path.exists(filename):
-            raise Exception('File not found: {0}'.format(filename))
-        self.lexer = NewickLexer(Streamer(open(filename)))
+    def __init__(self, fp):
+        if isinstance(fp, str):
+            if not os.path.exists(fp):
+              raise Exception('File not found: {0}'.format(fp))
+            fp = open(fp)
+        self.lexer = NewickLexer(Streamer(fp))
         self.nodes = set()
         self.hierarchy = {}
         self.stack = []
