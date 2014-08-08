@@ -1,3 +1,13 @@
+from __future__ import print_function
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import absolute_import
+from future.builtins import filter
+from future.builtins import zip
+from future.builtins import chr
+from future.builtins import map
+from future.builtins import dict
+from future.builtins import str
 #!/usr/bin/env python
 #
 #  This scripts has the purpose of analyzing an orthoXML file.
@@ -9,6 +19,8 @@ try:
     import xml.etree.cElementTree as etree
 except ImportError:
     import xml.etree.ElementTree as etree
+from future import standard_library
+standard_library.install_hooks()
 import collections
 import itertools
 
@@ -331,7 +343,7 @@ class Taxonomy(object):
             self.printSubTreeR(fd, child.name, indent+1)
 
     def __str__(self):
-        import cStringIO as sIO
+        import io as sIO
         fd = sIO.StringIO()
         self.printSubTreeR(fd)
         res = fd.getvalue()

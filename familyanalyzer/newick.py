@@ -93,6 +93,9 @@ class NewickLexer(object):
     def __iter__(self):
         return self
 
+    def iter(self):
+        return self.__iter__()
+
     def __next__(self):
         """ Each iteration returns a token. While a token isn't ready,
         advance the state machine one state. """
