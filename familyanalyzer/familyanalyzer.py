@@ -899,9 +899,8 @@ class GroupAnnotator(object):
     def _addTaxRangeR(self, node, last=None, noUpwardLevels=False):
         """recursive method to ad TaxRange property tags."""
         if self.parser.is_ortholog_group(node):
-            levels = {z.get('value') for z in node.findall(
-                './{{{ns0}}}property[@name="TaxRange"]'
-                .format(**self.ns))}
+            levels = {z.get('value')
+                      for z in OrthoXMLQuery.getTaxRangeNodes(node, False)}
             mostSpecificLevel = self.tax.mostSpecific(levels)
             if noUpwardLevels:
                 levelsToParent = set()
@@ -922,6 +921,25 @@ class GroupAnnotator(object):
                 self._addTaxRangeR(child, mostSpecificLevel)
 
         elif self.parser.is_paralog_group(node):
+            # need to do something similar to the is_geneRef_node branch
+            # below if the paralog group covers a subset of the taxonomy
+            # under the parent node - invent a fake orthologGroup with taxRange
+            # set to the missing level(s)
+            generef_nodes = OrthoXMLQuery.getGeneRefNodes(node)
+            species_covered = {self.parser.mapGeneToSpecies(gr.get('id'))
+                               for gr in generef_nodes}
+            mrca = self.tax.mrca(species_covered)
+            directParent = parent = node.getparent()
+            while not self.parser.is_ortholog_group(parent):
+                parent = parent.getparent()
+            levOfParent = OrthoXMLQuery.getLevels(parent)
+            mostSpecific = self.tax.mostSpecific(levOfParent)
+            # We compare the MRCA of the genes under the paralogGroup node
+            # (mrca) with the closest orthologGroup taxRange (mostSpecific)
+            # and use _insertOG to add dummy orthologGroups annotating
+            # the missing levels
+            self._insertOG(directParent, node, mrca, mostSpecific,
+                           include_self=False)
             for child in list(node):
                 self._addTaxRangeR(child, last)
         elif OrthoXMLQuery.is_geneRef_node(node):
@@ -938,10 +956,12 @@ class GroupAnnotator(object):
             mostSpecific = self.tax.mostSpecific(levOfParent)
             self._insertOG(directParent, node, expRange, mostSpecific)
 
-    def _insertOG(self, parent, child, specificLev, beforeLev):
+    def _insertOG(self, parent, child, specificLev, beforeLev,
+                  include_self=True):
         pos = parent.index(child)
         el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
-        el.append(self._createTaxRangeTag(specificLev))
+        if include_self:
+            el.append(self._createTaxRangeTag(specificLev))
         for lev in self.tax.iterParents(specificLev, stopBefore=beforeLev):
             el.append(self._createTaxRangeTag(lev))
         el.append(child)
@@ -992,8 +1012,8 @@ class GroupAnnotator(object):
             pbar.start()
 
         highest_group = max(self.parser.getToplevelGroups(),
-                            key=lambda x: int(x.get('id')))
-        input_genes = set(n.get('id') for n in
+                            key=lambda x: int(x.get('id'))) # TODO: If top-level orthologNodes have no id field this errors out
+        input_genes = set(n.get('id') for n in              # Maybe add code to enumerate OG nodes if ids are missing?
                           OrthoXMLQuery.getInputGenes(self.parser.root))
         grouped_genes = set(n.get('id') for n in
                             OrthoXMLQuery.getGroupedGenes(self.parser.root))

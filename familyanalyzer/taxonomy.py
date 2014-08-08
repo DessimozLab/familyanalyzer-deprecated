@@ -103,6 +103,9 @@ class Taxonomy(object):
 
     def mrca(self, species):
         """Returns most recent common ancestor (MRCA) of a set of species"""
+        if len(species) == 1:
+            mrca, = species
+            return mrca
         ancestors = [set(self.iterParents(s)) for s in species]
         common_ancestors = reduce(lambda x, y: x & y, ancestors)
         mrca = self.mostSpecific(common_ancestors)
