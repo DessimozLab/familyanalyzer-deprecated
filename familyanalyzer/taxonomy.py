@@ -44,6 +44,9 @@ class Taxonomy(object):
     def __iter__(self):
         return self.hierarchy[self.root].iter_preorder()
 
+    def iter(self):
+        return self.__iter__()
+
     def __getitem__(self, node_name):
         return self.hierarchy[node_name]
 
@@ -396,14 +399,17 @@ class Queue(object):
     def __len__(self):
         return len(self.__queue)
 
-    def next():
-        """ Python 2.x / 3.x compatibility hack """
-        return self.__next__()
-
     def __next__(self):
         if self.isempty():
             raise StopIteration
         return self.dequeue()
+
+    def iter():
+        return self.__iter__()
+
+    def next():
+        """ Python 2.x / 3.x compatibility hack """
+        return self.__next__()
 
     def enqueue(self, item):
         self.__queue.append(item)

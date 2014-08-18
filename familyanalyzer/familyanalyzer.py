@@ -509,6 +509,9 @@ class FamHistory(object):
     def __iter__(self):
         return iter(self.geneFamList)
 
+    def iter(self):
+        return self.__iter__()
+
     @property
     def geneFamList(self):
         return self._geneFamList
@@ -800,6 +803,9 @@ class LevelComparisonResult(object):
 
     def __iter__(self):
         return iter(self.fams)
+
+    def iter(self):
+        return self.__iter__()
 
     @property
     def fams(self):

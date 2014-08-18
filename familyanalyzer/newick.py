@@ -3,6 +3,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 from future.builtins import next
+from future.builtins import str
 from future import standard_library
 standard_library.install_hooks()
 
@@ -49,6 +50,14 @@ class Streamer(object):
 
         return char
 
+    def iter(self):
+        """ Python 2 compatible iteration """
+        return self.__iter__()
+
+    def next(self):
+        """ Python 2 compatible iteration """
+        return self.__next__()
+
     def peek(self):
         return self._peek
 
@@ -93,9 +102,6 @@ class NewickLexer(object):
     def __iter__(self):
         return self
 
-    def iter(self):
-        return self.__iter__()
-
     def __next__(self):
         """ Each iteration returns a token. While a token isn't ready,
         advance the state machine one state. """
@@ -103,6 +109,14 @@ class NewickLexer(object):
             self.state = self.state()
         token, self.token = self.token, None
         return token
+
+    def iter(self):
+        """ Python 2 compatible iteration """
+        return self.__iter__()
+
+    def next(self):
+        """ Python 2 compatible iteration """
+        return self.__next__()
 
     def pos(self):
         """ Returns position in input stream """
