@@ -36,9 +36,9 @@ class OrthoXMLQuery(object):
 
     @classmethod
     def getGeneRefNodes(cls, root, recursively=True):
-        xPrefix = ".//" if recursively else "./"
-        xquery = '{}{{{}}}geneRef'.format(xPrefix, cls.ns['ns0'])
-        return root.findall(xquery)
+        iterfn = root.iter if recursively else root.iterchildren
+        iterator = iterfn('{{{}}}geneRef'.format(cls.ns['ns0']))
+        return list(iterator)
 
     @classmethod
     def getGeneFromId(cls, id_, root):

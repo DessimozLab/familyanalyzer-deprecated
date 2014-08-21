@@ -111,6 +111,18 @@ class OrthoXMLParser(object):
 
         return OrthoXMLQuery.getGroupsAtLevel(level, root)
 
+    def get_species_below_node(self, node):
+        """ return a set of all species that have a geneRef present beneath
+        the specified node
+
+        :param root: Node of interest
+        :return:
+        """
+        generef_nodes = OrthoXMLQuery.getGeneRefNodes(node)
+        species_covered = {self.mapGeneToSpecies(gr.get('id'))
+                           for gr in generef_nodes}
+        return species_covered
+
     @classmethod
     def is_ortholog_group(cls, element):
         """
@@ -509,9 +521,6 @@ class FamHistory(object):
     def __iter__(self):
         return iter(self.geneFamList)
 
-    def iter(self):
-        return self.__iter__()
-
     @property
     def geneFamList(self):
         return self._geneFamList
@@ -804,9 +813,6 @@ class LevelComparisonResult(object):
     def __iter__(self):
         return iter(self.fams)
 
-    def iter(self):
-        return self.__iter__()
-
     @property
     def fams(self):
         return sorted(self.fams_dict.values(), key=self.sort_key)
@@ -902,8 +908,9 @@ class GroupAnnotator(object):
                                      self._encodeParalogClusterId(nextOG, i),
                                      idx)
 
-    def _addTaxRangeR(self, node, last=None, noUpwardLevels=False):
+    def _addTaxRangeR_old(self, node, last=None, noUpwardLevels=False):
         """recursive method to ad TaxRange property tags."""
+
         if self.parser.is_ortholog_group(node):
             levels = {z.get('value')
                       for z in OrthoXMLQuery.getTaxRangeNodes(node, False)}
@@ -927,30 +934,84 @@ class GroupAnnotator(object):
                 self._addTaxRangeR(child, mostSpecificLevel)
 
         elif self.parser.is_paralog_group(node):
-            # need to do something similar to the is_geneRef_node branch
-            # below if the paralog group covers a subset of the taxonomy
-            # under the parent node - invent a fake orthologGroup with taxRange
-            # set to the missing level(s)
-            generef_nodes = OrthoXMLQuery.getGeneRefNodes(node)
-            species_covered = {self.parser.mapGeneToSpecies(gr.get('id'))
-                               for gr in generef_nodes}
-            mrca = self.tax.mrca(species_covered)
-            directParent = parent = node.getparent()
-            while not self.parser.is_ortholog_group(parent):
-                parent = parent.getparent()
-            levOfParent = OrthoXMLQuery.getLevels(parent)
-            mostSpecific = self.tax.mostSpecific(levOfParent)
-            # We compare the MRCA of the genes under the paralogGroup node
-            # (mrca) with the closest orthologGroup taxRange (mostSpecific)
-            # and use _insertOG to add dummy orthologGroups annotating
-            # the missing levels
-            self._insertOG(directParent, node, mrca, mostSpecific,
-                           include_self=False)
             for child in list(node):
                 self._addTaxRangeR(child, last)
         elif OrthoXMLQuery.is_geneRef_node(node):
             # to simplify analyses down to the taxlevel of a single species
             # we add an aditional fake orthologGroup just above each geneRef
+            # element with all the taxRanges between the most specific level
+            # of the parent orthologGroup node and the species itself.
+            spec = self.parser.mapGeneToSpecies(node.get('id'))
+            expRange = self.tax.hierarchy[spec].name
+            directParent = parent = node.getparent()
+            while not self.parser.is_ortholog_group(parent):
+                parent = parent.getparent()
+            levOfParent = OrthoXMLQuery.getLevels(parent)
+            mostSpecific = self.tax.mostSpecific(levOfParent)
+            self._insertOG(directParent, node, expRange, mostSpecific)
+
+    def _addTaxRangeR(self, node, last=None, noUpwardLevels=False):
+        """recursive method to add TaxRange property tags."""
+        if self.parser.is_ortholog_group(node):
+            # print('Ortholog group: {} - line {}'.format(node.get('id'), node.sourceline))
+            levels = {z.get('value')
+                      for z in OrthoXMLQuery.getTaxRangeNodes(node, False)} # set of nested levels
+            mostSpecificLevel = self.tax.mostSpecific(levels) # the youngest level
+            if noUpwardLevels:
+                levelsToParent = set()
+            else:
+                levelsToParent = {l for l in
+                                  self.tax.iterParents(mostSpecificLevel,
+                                                       last)}
+                levelsToParent.add(mostSpecificLevel)
+                if not levels.issubset(levelsToParent):
+                    raise Exception("taxonomy not in correspondance with found"
+                                    " hierarchy: {} vs {}".format(
+                        levels,
+                        levelsToParent))
+            addLevels = levelsToParent - levels
+            for lev in addLevels:
+                node.append(self._createTaxRangeTag(lev))
+            for child in node:
+                self._addTaxRangeR(child, mostSpecificLevel)
+
+        elif self.parser.is_paralog_group(node):
+            # print('Paralog group - line {}'.format(node.sourceline))
+            # need to do something similar to the is_geneRef_node branch
+            # below if the paralog group covers a subset of the taxonomy
+            # under the parent node - invent a fake orthologGroup with taxRange
+            # set to the missing level(s)
+
+            species_covered = self.parser.get_species_below_node(node)
+            mrca = self.tax.mrca(species_covered)
+
+            try: # find the closest ancestral orthogroup that has a TaxRange property
+                parent_orthogroup_generator = (n for n in node.iterancestors('{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0']))
+                                               if n[0].tag == '{{{}}}property'.format(OrthoXMLQuery.ns['ns0']))
+                parent_orthogroup = next(parent_orthogroup_generator)
+            except:
+                parent_orthogroup = None
+
+            if parent_orthogroup is not None:
+                parent_levels = {z.get('value')
+                                for z in OrthoXMLQuery.getTaxRangeNodes(parent_orthogroup, False)}
+                most_recent_level = self.tax.mostSpecific(parent_levels) # the youngest level
+
+                # We compare the MRCA of the genes under the paralogGroup node
+                # (mrca) with the closest orthologGroup taxRange (mostSpecific)
+                # and use _insertOG to add dummy orthologGroups annotating
+                # the missing levels
+
+                if self.tax.levels_between(most_recent_level, mrca) > 1:
+                    self._insertOG(node.getparent(), node, mrca, most_recent_level, include_self=False)
+
+            for child in node:
+                self._addTaxRangeR(child, most_recent_level)
+
+        elif OrthoXMLQuery.is_geneRef_node(node):
+            # print('Generef: {} - line {}'.format(node.get('id'), node.sourceline))
+            # to simplify analyses down to the taxlevel of a single species
+            # we add an additional fake orthologGroup just above each geneRef
             # element with all the taxRanges between the most specific level
             # of the parent orthologGroup node and the species itself.
             spec = self.parser.mapGeneToSpecies(node.get('id'))

@@ -22,7 +22,7 @@ from functools import reduce
 
 from .orthoxmlquery import OrthoXMLQuery
 from .newick import NewickLexer, Streamer
-from .tools import PROGRESSBAR, setup_progressbar
+from .tools import PROGRESSBAR, setup_progressbar, py2_iterable
 
 
 class TaxonomyInconsistencyError(Exception):
@@ -44,9 +44,6 @@ class Taxonomy(object):
     def __iter__(self):
         return self.hierarchy[self.root].iter_preorder()
 
-    def iter(self):
-        return self.__iter__()
-
     def __getitem__(self, node_name):
         return self.hierarchy[node_name]
 
@@ -64,6 +61,19 @@ class Taxonomy(object):
     def is_ancestor_of(self, anc, desc):
         """ Returns True if `anc' is an ancestor of `desc'"""
         return anc in self.iterParents(desc)
+
+    def levels_between(self, anc, desc):
+        """ Counts the number of levels between anc and desc
+        If anc == desc, this is 0. If anc is the immediate parent
+        of desc this is 1, grandparent 2 etc. Return -1 if anc is
+        not an ancestor of desc."""
+        if anc == desc:
+            return 0
+        if not self.is_ancestor_of(anc, desc): # inefficient, but not *too* inefficient (?)
+            return -1
+        else:
+            parents = list(self.iterParents(desc, stopBefore=anc))
+            return len(parents) + 1
 
     def retain(self, leaves):
         """ Returns a deepcopy of self with all leaves not in `leaves'
@@ -388,6 +398,7 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         return True
 
 
+@py2_iterable
 class Queue(object):
 
     def __init__(self):
@@ -403,13 +414,6 @@ class Queue(object):
         if self.isempty():
             raise StopIteration
         return self.dequeue()
-
-    def iter():
-        return self.__iter__()
-
-    def next():
-        """ Python 2.x / 3.x compatibility hack """
-        return self.__next__()
 
     def enqueue(self, item):
         self.__queue.append(item)

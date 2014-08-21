@@ -9,7 +9,7 @@ standard_library.install_hooks()
 
 import io
 import collections
-from .tools import enum
+from .tools import enum, py2_iterable
 
 
 class LexError(Exception):
@@ -21,6 +21,7 @@ class LexError(Exception):
         return self.msg
 
 
+@py2_iterable
 class Streamer(object):
 
     """ Wraps an io.StringIO and iterates a byte at a time,
@@ -50,14 +51,6 @@ class Streamer(object):
 
         return char
 
-    def iter(self):
-        """ Python 2 compatible iteration """
-        return self.__iter__()
-
-    def next(self):
-        """ Python 2 compatible iteration """
-        return self.__next__()
-
     def peek(self):
         return self._peek
 
@@ -67,6 +60,7 @@ class Streamer(object):
 Token = collections.namedtuple('Token', 'typ val')
 
 
+@py2_iterable
 class NewickLexer(object):
 
     """ Breaks newick stream into lexing tokens:
@@ -109,14 +103,6 @@ class NewickLexer(object):
             self.state = self.state()
         token, self.token = self.token, None
         return token
-
-    def iter(self):
-        """ Python 2 compatible iteration """
-        return self.__iter__()
-
-    def next(self):
-        """ Python 2 compatible iteration """
-        return self.__next__()
 
     def pos(self):
         """ Returns position in input stream """
