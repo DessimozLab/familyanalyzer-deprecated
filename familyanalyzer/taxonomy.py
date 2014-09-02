@@ -675,6 +675,7 @@ class NewickTaxonomy(Taxonomy):
 
             elif token.typ == tokens.ENDTREE:  # trigger for tree-finalising functions
                 self.populate(self.root)
+                del self.lexer
                 return
 
             elif token.typ in (tokens.LABEL, tokens.LENGTH, tokens.SUPPORT):

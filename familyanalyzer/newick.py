@@ -108,9 +108,6 @@ class NewickLexer(object):
         """ Returns position in input stream """
         return self.streamer.stream.tell()
 
-    def stop(self):
-        raise StopIteration
-
     def truncated_string(self, s, length=60, ellipsis='...'):
         """ Returns a string `s` truncated to maximum length `length`.
         If `s` is longer than `length` it is truncated and `ellipsis` is
@@ -126,7 +123,7 @@ class NewickLexer(object):
 
         if self.streamer.isclosed():
             self.emit(Token(self.tokens.EOF, -1))
-            return self.stop
+            raise StopIteration
 
         self.emit(Token(self.tokens.TREE, ''))
         return self.lex_subtree_start
