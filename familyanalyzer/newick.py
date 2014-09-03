@@ -1,9 +1,15 @@
-#!/usr/bin/env python
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future.builtins import next
+from future.builtins import str
+from future import standard_library
+standard_library.install_hooks()
 
 import io
 import collections
-import os
-from familyanalyzer import TaxNode, Taxonomy, enum
+from .tools import enum, py2_iterable
 
 
 class LexError(Exception):
@@ -15,15 +21,7 @@ class LexError(Exception):
         return self.msg
 
 
-class ParseError(Exception):
-
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return self.msg
-
-
+@py2_iterable
 class Streamer(object):
 
     """ Wraps an io.StringIO and iterates a byte at a time,
@@ -62,6 +60,7 @@ class Streamer(object):
 Token = collections.namedtuple('Token', 'typ val')
 
 
+@py2_iterable
 class NewickLexer(object):
 
     """ Breaks newick stream into lexing tokens:
@@ -109,9 +108,6 @@ class NewickLexer(object):
         """ Returns position in input stream """
         return self.streamer.stream.tell()
 
-    def stop(self):
-        raise StopIteration
-
     def truncated_string(self, s, length=60, ellipsis='...'):
         """ Returns a string `s` truncated to maximum length `length`.
         If `s` is longer than `length` it is truncated and `ellipsis` is
@@ -127,7 +123,7 @@ class NewickLexer(object):
 
         if self.streamer.isclosed():
             self.emit(Token(self.tokens.EOF, -1))
-            return self.stop
+            raise StopIteration
 
         self.emit(Token(self.tokens.TREE, ''))
         return self.lex_subtree_start
@@ -272,141 +268,3 @@ class NewickLexer(object):
 
         else:
             self.empty_buffer()
-
-
-class NewickTaxonomy(Taxonomy):
-
-    """ Create a taxonomy from a file in newick format. The file should contain
-    one tree (further trees are ignored). Only the tree topology is used -
-    branch lengths and bootstrap support values are thown away.
-    The leaf labels should match those in the orthoXML. Inner labels
-    should match too, but for OMA XML will be automatically generated if
-    auto_annotate == True """
-
-    def __init__(self, filename):
-        if not os.path.exists(filename):
-            raise Exception('File not found: {0}'.format(filename))
-        self.lexer = NewickLexer(Streamer(open(filename)))
-        self.nodes = set()
-        self.hierarchy = {}
-        self.stack = []
-        self.parse()
-
-    def _get_label(self, tokens):
-        """ Get the node data attributes 'label' and 'length'. Assumes these
-        will be the next tokens in the stream. Throws ParseError if they are
-        not. """
-        label = next(self.lexer)
-        if label.typ not in (tokens.LABEL, tokens.SUPPORT):
-            raise ParseError(
-                'Expected a label or a support value, found {0}'.format(
-                    label))
-
-        length = next(self.lexer)
-        if length.typ != tokens.LENGTH:
-            raise ParseError('Expected a length, found {0}'.format(
-                length))
-
-        return (label.val if label.typ == tokens.LABEL else None)
-
-    def annotate_from_orthoxml(self, xmlparser):
-        """ Transfers internal node names from OMA orthoxml """
-        def _annotate(self, node, levels_dict):
-            if not node.down:
-                self.nodes.add(node.name)
-                self.hierarchy[node.name] = node
-                return
-            key = frozenset((n.name for n in node.iterLeaves()))
-            node.name = levels_dict[key]
-            self.nodes.add(node.name)
-            self.hierarchy[node.name] = node
-            for child in node.down:
-                _annotate(self, child, levels_dict)
-
-        levels = xmlparser.getLevels()
-        levels_dict = dict((frozenset(x.split('/')), x) for x in levels)
-        root_node = self.hierarchy[self.root]
-        root_node.name = 'LUCA'
-        self.hierarchy = {'LUCA': root_node}
-        self.nodes = set('LUCA')
-        self.root = 'LUCA'
-
-        for child in root_node.down:
-            _annotate(self, child, levels_dict)
-
-    def populate(self, root):
-        if len(root.down) == 0:
-            self.hierarchy[root.name] = root
-            self.nodes.add(root.name)
-            return
-
-        if not root.up:
-            self.root = (root.name or 'LUCA')
-
-        self.hierarchy[root.name] = root
-        self.nodes.add(root.name)
-
-        for child in root.down:
-            self.populate(child)
-
-    def parse(self):
-        tmp_name = 1
-        tokens = self.lexer.tokens
-
-        for token in self.lexer:
-            if token.typ == tokens.EOF:
-                return
-
-            elif token.typ == tokens.TREE:
-                # invent a name for the node
-                n = TaxNode(str(tmp_name))
-                tmp_name += 1
-
-                # push it onto the stack
-                self.stack.append(n)
-
-                # set as root
-                self.root = n
-
-            elif token.typ == tokens.SUBTREE:
-                # invent a name and make a node
-                n = TaxNode(str(tmp_name))
-                tmp_name += 1
-
-                # get parent
-                p = self.stack[-1]
-                p.addChild(n)
-                n.addParent(p)
-
-                # push subtree onto the stack
-                self.stack.append(n)
-
-            elif token.typ == tokens.LEAF:
-                label = self._get_label(tokens)
-                self.nodes.add(label)
-                l = TaxNode(label)
-
-                # get parent from stack
-                p = self.stack[-1]
-                p.addChild(l)
-                l.addParent(p)
-
-            elif token.typ == tokens.ENDSUB:
-                label = self._get_label(tokens)
-
-                # retrieve node from stack
-                subtree = self.stack.pop()
-
-                # update node name
-                if isinstance(label, str):
-                    subtree.name = label
-
-            elif token.typ == tokens.ENDTREE:  # trigger for tree-finalising functions
-                self.populate(self.root)
-                return
-
-            elif token.typ in (tokens.LABEL, tokens.LENGTH, tokens.SUPPORT):
-                raise ParseError('Unexpected token in stream: {0}'.format(token))
-
-            else:
-                raise ParseError('Not sure what happened')

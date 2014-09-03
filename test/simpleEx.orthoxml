@@ -73,7 +73,7 @@ Example Notes without meaning
       <geneRef id="11" />
      </orthologGroup>
      <orthologGroup >
-      <property name="TaxRange" value="Rodens"/>
+      <property name="TaxRange" value="Rodents"/>
       <geneRef id="31" />
       <geneRef id="41" />
      </orthologGroup>

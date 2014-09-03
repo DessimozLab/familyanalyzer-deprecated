@@ -5,5 +5,7 @@ familyanalyzer.egg-info
 *.pyc
 test/test_comparisongraph.py
 test/simpleExAugmented.orthoxml
-makefile
 .ropeproject
+.idea
+.ipynb_checkpoints
+*.ipynb
