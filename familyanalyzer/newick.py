@@ -3,12 +3,13 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 from future.builtins import next
+from future.builtins import str
 from future import standard_library
 standard_library.install_hooks()
 
 import io
 import collections
-from .tools import enum
+from .tools import enum, py2_iterable
 
 
 class LexError(Exception):
@@ -20,6 +21,7 @@ class LexError(Exception):
         return self.msg
 
 
+@py2_iterable
 class Streamer(object):
 
     """ Wraps an io.StringIO and iterates a byte at a time,
@@ -58,6 +60,7 @@ class Streamer(object):
 Token = collections.namedtuple('Token', 'typ val')
 
 
+@py2_iterable
 class NewickLexer(object):
 
     """ Breaks newick stream into lexing tokens:
@@ -93,9 +96,6 @@ class NewickLexer(object):
     def __iter__(self):
         return self
 
-    def iter(self):
-        return self.__iter__()
-
     def __next__(self):
         """ Each iteration returns a token. While a token isn't ready,
         advance the state machine one state. """
@@ -107,9 +107,6 @@ class NewickLexer(object):
     def pos(self):
         """ Returns position in input stream """
         return self.streamer.stream.tell()
-
-    def stop(self):
-        raise StopIteration
 
     def truncated_string(self, s, length=60, ellipsis='...'):
         """ Returns a string `s` truncated to maximum length `length`.
@@ -126,7 +123,7 @@ class NewickLexer(object):
 
         if self.streamer.isclosed():
             self.emit(Token(self.tokens.EOF, -1))
-            return self.stop
+            raise StopIteration
 
         self.emit(Token(self.tokens.TREE, ''))
         return self.lex_subtree_start

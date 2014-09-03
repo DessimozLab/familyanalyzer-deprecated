@@ -31,3 +31,46 @@ def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
     enums['reverse'] = dict((value, key) for key, value in enums.items())
     return type('Enum', (object, ), enums)
+
+
+class IterableClassException(Exception):
+    pass
+
+def py2_iterable(Class):
+    """
+    Use as a class decorator to make a class that has a python 3 next method --
+    __next__() -- also iterable with python 2, which uses next(). Also checks
+    for an __iter__ method -- if this is missing the class won't be iterable anyway.
+
+
+    e.g.
+    @py2_iterable
+    class Py2and3Iterator(object):
+        def __init__(self):
+            self.data = list('somestuff')
+            self._pos = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self._pos == len(self.data):
+                self._pos = 0
+                raise StopIteration
+            char = self.data[self._pos]
+            self._pos += 1
+            return char
+
+
+    :param Class: the class being decorated
+    :return: Class: the decorated class, which is iterable in py2 and py3
+    """
+    if not hasattr(Class, '__iter__'):
+        raise IterableClassException('Class "{}" has no __iter__ method and will not be iterable'
+                                     .format(Class.__class__.__name__))
+
+    if hasattr(Class, '__next__'):
+        next_method = getattr(Class, '__next__')
+        setattr(Class, 'next', next_method)
+
+    return Class

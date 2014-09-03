@@ -40,9 +40,9 @@ class GeneTreeNode(object):
         self.name            = name
         self.node_type       = node_type
         self.taxonomic_level = level
-        self.children        = list()
+        self.children        = []
         self.parent          = None
-        self.genes           = list()
+        self.genes           = []
         self.fam_id          = ''
 
     @property

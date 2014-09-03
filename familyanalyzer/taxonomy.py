@@ -22,7 +22,7 @@ from functools import reduce
 
 from .orthoxmlquery import OrthoXMLQuery
 from .newick import NewickLexer, Streamer
-from .tools import PROGRESSBAR, setup_progressbar
+from .tools import PROGRESSBAR, setup_progressbar, py2_iterable
 
 
 class TaxonomyInconsistencyError(Exception):
@@ -61,6 +61,19 @@ class Taxonomy(object):
     def is_ancestor_of(self, anc, desc):
         """ Returns True if `anc' is an ancestor of `desc'"""
         return anc in self.iterParents(desc)
+
+    def levels_between(self, anc, desc):
+        """ Counts the number of levels between anc and desc
+        If anc == desc, this is 0. If anc is the immediate parent
+        of desc this is 1, grandparent 2 etc. Return -1 if anc is
+        not an ancestor of desc."""
+        if anc == desc:
+            return 0
+        if not self.is_ancestor_of(anc, desc): # inefficient, but not *too* inefficient (?)
+            return -1
+        else:
+            parents = list(self.iterParents(desc, stopBefore=anc))
+            return len(parents) + 1
 
     def retain(self, leaves):
         """ Returns a deepcopy of self with all leaves not in `leaves'
@@ -103,6 +116,9 @@ class Taxonomy(object):
 
     def mrca(self, species):
         """Returns most recent common ancestor (MRCA) of a set of species"""
+        if len(species) == 1:
+            mrca, = species
+            return mrca
         ancestors = [set(self.iterParents(s)) for s in species]
         common_ancestors = reduce(lambda x, y: x & y, ancestors)
         mrca = self.mostSpecific(common_ancestors)
@@ -382,6 +398,7 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         return True
 
 
+@py2_iterable
 class Queue(object):
 
     def __init__(self):
@@ -392,10 +409,6 @@ class Queue(object):
 
     def __len__(self):
         return len(self.__queue)
-
-    def next():
-        """ Python 2.x / 3.x compatibility hack """
-        return self.__next__()
 
     def __next__(self):
         if self.isempty():
@@ -662,6 +675,7 @@ class NewickTaxonomy(Taxonomy):
 
             elif token.typ == tokens.ENDTREE:  # trigger for tree-finalising functions
                 self.populate(self.root)
+                del self.lexer
                 return
 
             elif token.typ in (tokens.LABEL, tokens.LENGTH, tokens.SUPPORT):
