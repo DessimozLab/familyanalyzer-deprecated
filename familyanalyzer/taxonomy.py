@@ -22,7 +22,7 @@ from functools import reduce
 
 from .orthoxmlquery import OrthoXMLQuery
 from .newick import NewickLexer, Streamer
-from .tools import PROGRESSBAR, setup_progressbar, py2_iterable
+from .tools import PROGRESSBAR, Queue, setup_progressbar
 
 
 class TaxonomyInconsistencyError(Exception):
@@ -396,35 +396,6 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
             if (first, node) in self.adj and (node, second) in self.adj:
                 return False
         return True
-
-
-@py2_iterable
-class Queue(object):
-
-    def __init__(self):
-        self.__queue = deque()
-
-    def __iter__(self):
-        return self
-
-    def __len__(self):
-        return len(self.__queue)
-
-    def __next__(self):
-        if self.isempty():
-            raise StopIteration
-        return self.dequeue()
-
-    def enqueue(self, item):
-        self.__queue.append(item)
-
-    def dequeue(self):
-        if self.isempty():
-            raise Exception('empty queue')
-        return self.__queue.popleft()
-
-    def isempty(self):
-        return len(self.__queue) == 0
 
 
 class TaxNode(object):
