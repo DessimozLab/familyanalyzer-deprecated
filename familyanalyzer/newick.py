@@ -29,8 +29,8 @@ class Streamer(object):
 
     def __init__(self, stream):
         """ _peek always looks ahead 1 position """
-        if isinstance(stream, str):
-            stream = io.StringIO(stream)
+        if isinstance(stream, str) or isinstance(stream, basestring):
+            stream = io.StringIO(u'{}'.format(stream))
         self.stream = stream
         self._peek = self.stream.read(1)
 
@@ -50,7 +50,6 @@ class Streamer(object):
             raise StopIteration
 
         return char
-
     def peek(self):
         return self._peek
 
