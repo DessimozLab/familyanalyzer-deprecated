@@ -86,9 +86,9 @@ class GeneTreeNode(object):
         NHX_string = '&&NHX'
         event, duplication = self.events[self.node_type]
 
-        if self.node_type is not 'leaf':
+        if self.node_type != 'leaf':
             NHX_string += ':Ev={0}'.format(event)
-            if self.node_type is not 'loss':
+            if self.node_type != 'loss':
                 NHX_string += ':D={0}'.format(duplication)
         if self.taxonomic_level > '':
             NHX_string += ':S={0}'.format(self.taxonomic_level)
