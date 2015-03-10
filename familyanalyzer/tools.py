@@ -13,6 +13,8 @@ try:
 except ImportError:
     PROGRESSBAR = False
 
+from collections import deque
+
 def setup_progressbar(msg, size):
     if not msg.endswith(': '):
         msg += ': '
