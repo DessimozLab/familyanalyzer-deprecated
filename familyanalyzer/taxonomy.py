@@ -554,7 +554,7 @@ class NewickTaxonomy(Taxonomy):
     generated if auto_annotate == True """
 
     def __init__(self, fp):
-        if isinstance(fp, str):
+        if isinstance(fp, basestring):
             if not os.path.exists(fp):
               raise Exception('File not found: {0}'.format(fp))
             fp = open(fp)
