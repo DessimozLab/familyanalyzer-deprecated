@@ -11,6 +11,7 @@ from future.builtins import map
 from future.builtins import str
 from future import standard_library
 standard_library.install_hooks()
+from past.builtins import basestring
 
 import copy
 import io
