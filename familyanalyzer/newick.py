@@ -6,6 +6,7 @@ from future.builtins import next
 from future.builtins import str
 from future import standard_library
 standard_library.install_hooks()
+from past.builtins import basestring
 
 import io
 import collections
