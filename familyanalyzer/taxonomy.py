@@ -169,11 +169,11 @@ class Taxonomy(object):
         for child in self.hierarchy[lev].down:
             self.printSubTreeR(fd, child.name, indent+1)
 
-    def get_histories(self, parser):
+    def get_histories(self, parser, verbosity=0):
 
         histories = {}
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar = setup_progressbar('Getting histories', len(self.hierarchy))
             pbar.start()
 
@@ -182,16 +182,16 @@ class Taxonomy(object):
             history.analyzeLevel(level)
             histories[level] = history
             self.hierarchy[level].attach_fam_history(history)
-            if PROGRESSBAR:
+            if PROGRESSBAR and verbosity > 0:
                 pbar.update(i)
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar.finish()
 
         self.histories = histories
         return histories
 
-    def get_comparisons(self, parser):
+    def get_comparisons(self, parser, verbosity=0):
 
         if getattr(self, 'histories', None) is None:
             self.get_histories(parser)
@@ -200,7 +200,7 @@ class Taxonomy(object):
         to_compare = [(node, child) for node in self
                                     for child in node.down]
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar = setup_progressbar('Comparing', len(to_compare))
             pbar.start()
 
@@ -210,10 +210,10 @@ class Taxonomy(object):
             parent_child_comparison = parent_history.compare(child_history)
             comparisons[(parent.name, child.name)] = parent_child_comparison
             child.attach_level_comparison_result(parent_child_comparison)
-            if PROGRESSBAR:
+            if PROGRESSBAR and verbosity > 0:
                 pbar.update(i)
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar.finish()
 
         return comparisons

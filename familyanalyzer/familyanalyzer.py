@@ -959,7 +959,7 @@ class GroupAnnotator(object):
         return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
                              attrib=dict(name='TaxRange', value=lev))
 
-    def annotateMissingTaxRanges(self, tax, propagate_top=False):
+    def annotateMissingTaxRanges(self, tax, propagate_top=False, verbosity=0):
         """This function adds left-out taxrange property elements to
         the orthologGroup elements in the xml. It will add all the levels
         defined in the 'tax'-Taxonomy between the parents most specific
@@ -969,7 +969,7 @@ class GroupAnnotator(object):
 
         top_level_groups = self.parser.getToplevelGroups()
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar = setup_progressbar(
                 'Adding missing taxonomy annotation: ',
                 len(top_level_groups)
@@ -978,10 +978,10 @@ class GroupAnnotator(object):
 
         for i, fam in enumerate(top_level_groups, start=1):
             self._addTaxRangeR(fam, noUpwardLevels=not propagate_top)
-            if PROGRESSBAR:
+            if PROGRESSBAR and verbosity > 0:
                 pbar.update(i)
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar.finish()
 
         del self.tax
@@ -992,10 +992,10 @@ class GroupAnnotator(object):
             self.dupCnt = list()
             self._annotateGroupR(fam, fam.get('id', str(i)))
 
-    def annotateSingletons(self):
+    def annotateSingletons(self, verbosity=0):
         """Any input genes that aren't assigned to ortholog groups are
         singletons, which are added to the xml as extra ortholog groups"""
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar = setup_progressbar('Adding singletons: ', 1)
             pbar.start()
 
@@ -1011,7 +1011,7 @@ class GroupAnnotator(object):
         fam_num = int(highest_group.get('id')) + 1
         singleton_families = set()
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar.maxval = len(singletons)
 
         for i, gene in enumerate(sorted(singletons), start=1):
@@ -1026,9 +1026,9 @@ class GroupAnnotator(object):
                                                             id=gene))
             groups_node.append(new_node)
             fam_num += 1
-            if PROGRESSBAR:
+            if PROGRESSBAR and verbosity > 0:
                 pbar.update(i)
 
         self.parser.singletons = singleton_families
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar.finish()

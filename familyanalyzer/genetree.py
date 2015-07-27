@@ -162,10 +162,10 @@ class GeneTreeTracer(object):
 
         return sorted(job_list, key=lambda x: x[1])
 
-    def trace_gene_families(self, add_genelists=False):
+    def trace_gene_families(self, add_genelists=False, verbosity=0):
         job_list = self._get_job_list(add_genelists)
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar = setup_progressbar('Extracting {0} genetrees: '
                                      .format(len(job_list)), len(job_list))
             pbar.start()
@@ -173,10 +173,10 @@ class GeneTreeTracer(object):
         for i, job in enumerate(job_list, start=1):
             self.trace_gene_family(*job)
             self._reset_counters()
-            if PROGRESSBAR:
+            if PROGRESSBAR and verbosity > 0:
                 pbar.update(i)
 
-        if PROGRESSBAR:
+        if PROGRESSBAR and verbosity > 0:
             pbar.finish()
 
     def _create_parent(self, name, node_type, level):
