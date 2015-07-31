@@ -1,0 +1,55 @@
+#!/usr/bin/env python
+from lxml import etree
+import sys
+
+def handle_args():
+    import argparse
+
+    description = 'Find origin of gene\'s gene families.'
+
+    help_messages = {
+        'orthoxml': "path to orthoxml file containing HOG information",
+        'genelist' : "genes of interest given as a textfile"
+    }
+    
+    parser = argparse.ArgumentParser(prog='FA_Phylostrat',
+                                     description=description)
+    parser.add_argument('orthoxml', help=help_messages['orthoxml'])
+    parser.add_argument('genelist', help=help_messages['genelist'])
+
+    return parser.parse_args()
+
+def main():
+    args = handle_args()
+    
+    # read OrthoXML
+    tree = etree.parse(args.orthoxml)
+    
+    # read gene list
+    genes = []
+    with open(args.genelist, 'r') as f:
+        for line in f.readlines():
+            genes.append(line.replace('\n', '').replace('"',"'"))
+    
+    ns = {"ns0": "http://orthoXML.org/2011/"} # define name space
+    psg_out = '"Gene","Species","Level of first common ancestor"\n'
+    for gene in genes:
+        node = tree.find(".//{{{0}}}{1}".format(ns['ns0'], "gene[@protId='"+gene+"']"))
+        species  = node.getparent().getparent().getparent().get("name")
+        omaId = node.get("id")
+        node = tree.find(".//{{{0}}}{1}".format(ns['ns0'], "geneRef[@id='"+omaId+"']"))
+        if node is None:
+            psg_out += '"' + gene + '","' + species + '","' + species + '"\n'
+            continue
+        parent = node.getparent()
+        while(parent.getparent().tag.split('}')[-1] != "groups"):
+            parent = parent.getparent()
+        taxRange = parent.find(".//{{{0}}}{1}".format(ns['ns0'], "property")).get("value")
+        psg_out += '"' + gene + '","' + species + '","' + taxRange + '"\n'
+    
+    # write output
+    with open(args.genelist+".psg.out", 'w') as f:
+        f.write(psg_out)
+
+if __name__ == "__main__":
+    sys.exit(main())
