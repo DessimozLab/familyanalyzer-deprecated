@@ -35,6 +35,9 @@ def main():
     psg_out = '"Gene","Species","Level of first common ancestor"\n'
     for gene in genes:
         node = tree.find(".//{{{0}}}{1}".format(ns['ns0'], "gene[@protId='"+gene+"']"))
+        if node is None:
+            psg_out += '"' + gene + '","ERROR: gene not found","ERROR: gene not found"\n'
+            continue
         species  = node.getparent().getparent().getparent().get("name")
         omaId = node.get("id")
         node = tree.find(".//{{{0}}}{1}".format(ns['ns0'], "geneRef[@id='"+omaId+"']"))
