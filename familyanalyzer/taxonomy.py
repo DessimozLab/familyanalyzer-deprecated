@@ -107,23 +107,39 @@ class Taxonomy(object):
         are parent levels. e.g. (arrow: is-parent-of)
           A->B->C
               \>D->E
-        will return A=0,B=1,C=2,D=2,E=3"""
-        levelSet = set(levels)
-        counts = dict()
-        for lev in levelSet:
-            t = set(self.iterParents(lev)).intersection(levelSet)
-            counts[lev] = len(t)
-        return counts
+        will return A=0,B=1,C=2,D=2,E=3
+        Cached to speed up multiple calls"""
+        if not hasattr(self, '_cpals_cache'):
+            self._cpals_cache = {}
+        levelSet = frozenset(levels)
+        try:
+            return self._cpals_cache[levelSet]
+        except KeyError:
+            counts = dict()
+            for lev in levelSet:
+                t = set(self.iterParents(lev)).intersection(levelSet)
+                counts[lev] = len(t)
+            self._cpals_cache[levelSet] = counts
+            return counts
 
     def mrca(self, species):
-        """Returns most recent common ancestor (MRCA) of a set of species"""
-        if len(species) == 1:
-            mrca, = species
+        """Returns most recent common ancestor (MRCA) of a set of species
+           This is cached to speed up multiple calls """
+        if not hasattr(self, '_mrca_cache'):
+            self._mrca_cache = {}
+        species = frozenset(species)
+        try:
+            return self._mrca_cache[species]
+        except KeyError:
+            if len(species) == 1:
+                mrca, = species
+                self._mrca_cache[species] = mrca
+                return mrca
+            ancestors = [set(self.iterParents(s)) for s in species]
+            common_ancestors = reduce(lambda x, y: x & y, ancestors)
+            mrca = self.mostSpecific(common_ancestors)
+            self._mrca_cache[species] = mrca
             return mrca
-        ancestors = [set(self.iterParents(s)) for s in species]
-        common_ancestors = reduce(lambda x, y: x & y, ancestors)
-        mrca = self.mostSpecific(common_ancestors)
-        return mrca
 
     def mostSpecific(self, levels):
         """returns the most specific (youngest) level among a set of
@@ -152,15 +168,15 @@ class Taxonomy(object):
         Filters a set of levels, removing any that are older than the
         oldest_permitted (oldest_permitted=string: node_name)
         """
-        try:
-            oldest_permitted_node = self.hierarchy[oldest_permitted]
-        except KeyError:
-            raise Exception('No node with name {} found in '
-                            'Taxonomy'.format(oldest_permitted))
-        permitted = [node.name
-                     for node in oldest_permitted_node.iter_preorder()]
+        # try:
+        #     oldest_permitted_node = self.hierarchy[oldest_permitted]
+        # except KeyError:
+        #     raise Exception('No node with name {} found in '
+        #                     'Taxonomy'.format(oldest_permitted))
+        # permitted = [node.name
+        #              for node in oldest_permitted_node.iter_preorder()]
 
-        return [lev for lev in levels if lev in permitted]
+        return [lev for lev in levels if lev in self.younger_nodes[oldest_permitted]]
 
     def printSubTreeR(self, fd, lev=None, indent=0):
         if lev is None:
@@ -325,6 +341,8 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         self.extractAdjacencies()
         self.bloat_all()
         self.extractHierarchy()
+        self.extractDescendentSpecies()
+        self.extractYoungerNodes()
 
     def _parseParentChildRelsR(self, grp):
         levels = None
@@ -397,6 +415,22 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
             if (first, node) in self.adj and (node, second) in self.adj:
                 return False
         return True
+
+    def extractDescendentSpecies(self):
+        """
+        Caches some frequently looked-up information - descendent leaves of every node
+        """
+        self.descendents = {}
+        for k, v in self.hierarchy.items():
+            self.descendents[k] = set(l.name for l in v.iter_leaves())
+
+    def extractYoungerNodes(self):
+        """
+        Caches some frequently looked-up information - descendent nodes of every node
+        """
+        self.younger_nodes = {}
+        for k, v in self.hierarchy.items():
+            self.younger_nodes[k] = set(n.name for n in v.iter_preorder())
 
 
 @py2_iterable

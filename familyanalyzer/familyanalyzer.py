@@ -447,11 +447,7 @@ class TaxAwareLevelAnalysis(BasicLevelAnalysis):
             # that is not older than `level'
             lev = self.tax.younger_than_filter(lev, level)
             mostGeneralLevel = self.tax.mostGeneralLevel(lev)
-            speciesCoveredByLevel = {
-                l.name for l in
-                self.tax.hierarchy[mostGeneralLevel].iter_leaves()
-            }
-
+            speciesCoveredByLevel = self.tax.descendents[mostGeneralLevel]
             lostSpecies = speciesCoveredByLevel.difference(summary.keys())
             for lost in lostSpecies:
                 summary[lost] = SummaryOfSpecies("ANCIENT_BUT_LOST", [])
@@ -487,18 +483,18 @@ class SingletonAwareLevelAnalysis(TaxAwareLevelAnalysis):
             spec = self.parser.mapGeneToSpecies(geneId)
             spec2genes[spec].add(geneId)
         summary = dict()
-        for spec in iter(spec2genes.keys()):
-            nrMemb = len(spec2genes[spec])
-            if nrMemb > 1:
+        famId = fam.getFamId()
+        for spec, set_ in spec2genes.items():
+            if len(set_) > 1:
                 gclass = self.GeneClasses.MULTICOPY
             else:
-                if fam.getFamId() in self.parser.singletons:
+                if famId in self.parser.singletons:
                     gclass = self.GeneClasses.SINGLETON
                 else:
                     gclass = self.GeneClasses.SINGLECOPY
 
             summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
-                                             spec2genes[spec])
+                                             set_)
 
         self.addLosses(fam, summary, level)
         return summary
