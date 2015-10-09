@@ -41,11 +41,13 @@ class OGLevelMapper(object):
 class HOGVisExtractor(object):
     def __init__(self, fname):
         self.parser = fa.OrthoXMLParser(fname)
+        self.re_non_char = re.compile(r'\W')  # matches non-standard chars (not A-Za-z0-9 or _)
+
+    def setup_extractor(self):
         self.tax = fa.TaxRangeOrthoXMLTaxonomy(self.parser)
         self.parser.augmentTaxonomyInfo(self.tax)
         anno = fa.GroupAnnotator(self.parser)
         anno.annotateDoc()
-        self.re_non_char = re.compile(r'\W')  # matches non-standard chars (not A-Za-z0-9 or _)
 
     def get_per_species_structure(self, fam):
         genes_per_species = self.genenodes_per_species(fam)
@@ -253,6 +255,7 @@ Example Notes without meaning
  </groups>
 </orthoXML>""".encode('utf-8'))
         self.hog_extractor = HOGVisExtractor(file)
+        self.hog_extractor.setup_extractor()
         self.fam = self.hog_extractor.parser.getToplevelGroups()[0]
         self.map = self.hog_extractor.get_groups_to_level_mapper(self.fam)
 
@@ -299,14 +302,15 @@ Example Notes without meaning
 class WriterTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
-        self.extractor_mock = HOGVisExtractor(io.BytesIO(""))
+        self.extractor_mock = HOGVisExtractor(io.BytesIO(b"""<?xml version="1.0" encoding="UTF-8"?>
+<orthoXML xmlns="http://orthoXML.org/2011/" version="0.3" origin="Family Analyzer Testcase" originVersion="0.2"></orthoXML>"""))
         self.extractor_mock.iter_families = MagicMock(return_value=(('(HUMAN,MOUSE)CANFA;',
-                                                                     {'HUMAN': [2, 4]}, {2: {'id': 2}}, 1)))
+                                                                     {'HUMAN': [2, 4]}, {2: {'id': 2}}, 1),))
 
     def test_write(self):
         writer = Writer(self.dir, self.extractor_mock)
         writer.dump_hogs()
-        expected_filename = os.path.join(self.dir, 'HOG{:06d}.html'.format(1))
+        expected_filename = os.path.join(self.dir, 'hog{:06d}.html'.format(1))
         self.assertTrue(os.path.exists(expected_filename))
         with open(expected_filename) as fh:
             data = fh.read()
@@ -316,7 +320,21 @@ class WriterTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.dir)
 
-if __name__ == "__main__":
-    ex = HOGVisExtractor('../Output/HierarchicalGroups.orthoxml')
-    wr = Writer('vis', ex)
+
+def handle_args():
+    import argparse
+    parser = argparse.ArgumentParser(prog='StandaloneHogVis',
+                                     description="Tool to prepare HogVis html pages to analyze the HOGs graphically")
+    parser.add_argument('-o', '--outdir', default='hogvis', help="directory where to store the html files."
+                                                                 "(defaults: 'vis/')")
+    parser.add_argument('orthoxml', help="path to the orthoxml file that should be converted")
+
+    conf = parser.parse_args()
+
+    ex = HOGVisExtractor(conf.orthoxml)
+    ex.setup_extractor()
+    wr = Writer(conf.outdir, ex)
     wr.dump_hogs()
+
+if __name__ == "__main__":
+    handle_args()
