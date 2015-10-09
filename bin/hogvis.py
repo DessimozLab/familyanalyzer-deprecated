@@ -2,7 +2,6 @@ import collections
 import io
 import os
 import unittest
-from unittest.mock import MagicMock
 import familyanalyzer.familyanalyzer as fa
 import json
 import itertools
@@ -10,6 +9,15 @@ import tempfile
 import shutil
 from string import Template
 import re
+try:
+    no_mock = False
+    from unittest.mock import MagicMock
+except ImportError:
+    try:
+        from mock import MagicMock
+    except ImportError:
+        no_mock = True
+
 
 __author__ = 'adriaal'
 
@@ -23,7 +31,6 @@ class OGLevelMapper(object):
                 self.levels[lev].append(og)
                 pos = len(self.levels[lev]) - 1
                 try:
-                    assert og.get('og') is not None
                     pos_before = self.id2pos[og.get('og')]
                     if pos != pos_before:
                         raise HOGError(
@@ -287,18 +294,13 @@ Example Notes without meaning
         self.assertDictEqual(expected_HUMAN, per_species['HUMAN'])
         self.assertDictEqual(expected_MOUSE, per_species['MOUSE'])
 
-    @unittest.skip  # newick string is not invariant against ordering...
-    def test_topology(self):
-        expected = "(XENTR, ((MOUSE, (HUMAN, PANTR)Primates)Euarchontoglires, CANFA)Mammalia)Vertebrata;"
-        topology = self.hog_extractor.get_topology(self.fam)
-        self.assertEqual(expected, topology)
-
     def test_xrefs(self):
         exprected_of_human5 = {'id': "5", 'protId': "HUMAN5", 'geneId': "HUMANg5"}
         xrefs = self.hog_extractor.get_xrefs(self.fam)
         self.assertEqual(exprected_of_human5, xrefs[5])
 
 
+@unittest.skipIf(no_mock, 'no mock module available')
 class WriterTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
