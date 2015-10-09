@@ -27,7 +27,7 @@ class OGLevelMapper(object):
                     pos_before = self.id2pos[og.get('og')]
                     if pos != pos_before:
                         raise HOGError(
-                            'HOG {!r} with several levels has inconsistent positions. This should not happen')
+                            'HOG {:!r} with several levels has inconsistent positions. This should not happen')
                 except KeyError:
                     self.id2pos[og.get('og')] = pos
 
@@ -41,6 +41,8 @@ class OGLevelMapper(object):
 class HOGVisExtractor(object):
     def __init__(self, fname):
         self.parser = fa.OrthoXMLParser(fname)
+        self.tax = fa.TaxRangeOrthoXMLTaxonomy(self.parser)
+        self.parser.augmentTaxonomyInfo(self.tax)
         anno = fa.GroupAnnotator(self.parser)
         anno.annotateDoc()
         self.re_non_char = re.compile(r'\W')  # matches non-standard chars (not A-Za-z0-9 or _)
@@ -61,7 +63,7 @@ class HOGVisExtractor(object):
                             lev_repr = lev
                             if self.re_non_char.search(lev):
                                 lev_repr = '"{}"'.format(lev)
-                            if lev not in cur_map:
+                            if lev_repr not in cur_map:
                                 cur_map[lev_repr] = [[] for _ in range(ogs_mapper.nr_subhogs_on_level(lev))]
                             if lev != org:
                                 cur_map[lev_repr][ogs_mapper.index(parent)].append(int(gene.get('id')))
@@ -90,13 +92,8 @@ class HOGVisExtractor(object):
             yield topology, per_species, xrefs, int(fam.get('id'))
 
     def get_topology(self, fam):
-        taxonomy = PerFamilyTopology(self.parser, fam)
-        anno = fa.GroupAnnotator(self.parser)
-        anno.dupCnt = list()
-        anno._annotateGroupR(fam, fam.get('id'))
-        anno.tax = taxonomy
-        anno._addTaxRangeR(fam, noUpwardLevels=True)
-        return taxonomy.newick()
+        lev_of_famroot = fa.OrthoXMLQuery.getLevels(fam)[0]
+        return str(self.tax.hierarchy[lev_of_famroot])+';'
 
     def get_xrefs(self, fam):
         geneRefs = fa.OrthoXMLQuery.getSubNodes("geneRef", fam)
@@ -105,27 +102,6 @@ class HOGVisExtractor(object):
             gid = gene.get('id')
             xrefs[int(gid)] = dict(fa.OrthoXMLQuery.getGeneFromId(gid, self.parser.root).attrib)
         return xrefs
-
-
-class PerFamilyTopology(fa.TaxRangeOrthoXMLTaxonomy):
-    """A Taxonomy Extracter from the orthoxml, but instead of inferring a global
-    taxonomy, do it for each family. This way we can avoid having many levels
-    where nothing happens in the hog, but still ensure that siblings hogs get
-    treated correctly, e.g. no missing intermediate level because of gene loss in
-    a sister lineage."""
-
-    def __init__(self, parser, fam):
-        self.parser = parser
-        self.extractAdjacencies(fam)
-        self.bloat_all()
-        self.extractHierarchy()
-        self.extractDescendentSpecies()
-        self.extractYoungerNodes()
-
-    def extractAdjacencies(self, fam):
-        self.adj = set()
-        self._parseParentChildRelsR(fam)
-        self.nodes = set(itertools.chain(*self.adj))
 
 
 class HOGError(Exception):
@@ -282,7 +258,8 @@ Example Notes without meaning
 
     def test_levelMap(self):
         self.assertEqual(self.map.nr_subhogs_on_level('Euarchontoglires'), 2)
-        self.assertEqual(self.map.nr_subhogs_on_level('Primates'), 1)
+        self.assertEqual(self.map.nr_subhogs_on_level('Primates'), 2)
+        self.assertEqual(self.map.nr_subhogs_on_level('Mammalia'), 1)
         self.assertEqual(self.map.nr_subhogs_on_level('LUCA'), 0)
 
     def test_og_id_equality(self):
@@ -298,7 +275,7 @@ Example Notes without meaning
         self.assertEqual([33, 34], mouse_geneids)
 
     def test_mapping(self):
-        expected_HUMAN = {'HUMAN': [[3], [5]], 'Primates': [[3, 5]],
+        expected_HUMAN = {'HUMAN': [[3], [5]], 'Primates': [[3, 5],[]],
                           'Euarchontoglires': [[3, 5], []],
                           'Mammalia': [[3, 5]], 'Vertebrata': [[3, 5]]}
         expected_MOUSE = {'MOUSE': [[33], [34]], 'Euarchontoglires': [[33], [34]],
