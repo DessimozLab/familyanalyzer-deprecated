@@ -146,8 +146,8 @@ class Writer(object):
         var options = {'show_internal_labels': "true",
                        'oma_info_url_template': ""};
 
-        var viz = tnt.tree_annot();
-        var theme = tnt_theme_tree_hog();
+        var viz = tnt();
+        var theme = hog_theme();
         theme (viz, document.getElementById("hog_tree"), query, per_species, tree, tooltip_data, options);
     }) ();
 
