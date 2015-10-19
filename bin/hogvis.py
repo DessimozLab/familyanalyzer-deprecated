@@ -1,5 +1,6 @@
 import collections
 import io
+import logging
 import os
 import unittest
 import familyanalyzer.familyanalyzer as fa
@@ -33,8 +34,11 @@ class OGLevelMapper(object):
                 try:
                     pos_before = self.id2pos[og.get('og')]
                     if pos != pos_before:
-                        raise HOGError(
-                            'HOG {:!r} with several levels has inconsistent positions. This should not happen')
+                        logging.warn(
+                            "HOG {} with several levels has inconsistent positions."
+                            "Lev: {}, pos_before, pos: {}/{}".format(og, lev, pos_before, pos))
+                        for _ in range(pos_before-pos):
+                            self.levels[lev].insert(pos, None)
                 except KeyError:
                     self.id2pos[og.get('og')] = pos
 
