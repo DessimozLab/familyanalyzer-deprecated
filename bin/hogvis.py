@@ -36,7 +36,7 @@ class OGLevelMapper(object):
                     if pos != pos_before:
                         logging.warn(
                             "HOG {} with several levels has inconsistent positions."
-                            "Lev: {}, pos_before, pos: {}/{}".format(og, lev, pos_before, pos))
+                            "Lev: {}, pos_before, pos: {}/{}".format(og.get('id'), lev, pos_before, pos))
                         for _ in range(pos_before-pos):
                             self.levels[lev].insert(pos, None)
                 except KeyError:
