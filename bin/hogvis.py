@@ -102,7 +102,7 @@ class HOGVisExtractor(object):
             topology = self.get_topology(fam)
             per_species = self.get_per_species_structure(fam)
             xrefs = self.get_xrefs(fam)
-            yield topology, per_species, xrefs, int(fam.get('id'))
+            yield topology, per_species, xrefs, fam.get('id')
 
     def get_topology(self, fam):
         lev_of_famroot = fa.OrthoXMLQuery.getLevels(fam)[0]
@@ -174,8 +174,15 @@ class Writer(object):
             self.write_hog(fam_id, newick, per_species, xrefs)
 
     def write_hog(self, fam_id, species_tree, per_species, xrefs):
-        with open(os.path.join(self.outdir, "hog{:06d}.html".format(fam_id)), 'w') as fh:
-            fh.write(self.html_template.safe_substitute({'name': "HOG{:06d}".format(fam_id),
+        try:
+            fam_nr = int(fam_id)
+            fam_id = "HOG{:06d}.html".format(fam_nr)
+        except ValueError:
+            fam_id.replace('/','_')
+        fname = os.path.join(self.outdir, fam_id)
+
+        with open(fname, 'w') as fh:
+            fh.write(self.html_template.safe_substitute({'name': fam_id,
                                                          'species_tree': species_tree,
                                                          'xrefs': json.dumps(xrefs),
                                                          'per_species': json.dumps(per_species)}))
