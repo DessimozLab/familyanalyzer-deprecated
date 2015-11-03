@@ -291,9 +291,16 @@ class GeneFamily(object):
         return target[:len(query)] == query
 
     def getMemberGenes(self):
-        members = self.root.findall('.//{{{ns0}}}geneRef'.
-                                    format(**OrthoXMLParser.ns))
-        return [x.get('id') for x in members]
+        """
+        Get all genes belonging to this family. Cached to speed up repeated calls.
+        """
+        if hasattr(self, '_member_genes'):
+            return self._member_genes
+        else:
+            members = self.root.findall('.//{{{ns0}}}geneRef'.
+                                        format(**OrthoXMLParser.ns))
+            self._member_genes = [x.get('id') for x in members]
+            return self._member_genes
 
     def getFamId(self):
         return self.root.get('og')
