@@ -127,7 +127,7 @@ def main():
     if args.taxonomy == "implicit":
         tax = fa.TaxonomyFactory.newTaxonomy(op)
     else:
-        from newick import NewickTaxonomy
+        from familyanalyzer.taxonomy import NewickTaxonomy
         tax = fa.TaxonomyFactory.newTaxonomy(args.taxonomy)
         if isinstance(tax, NewickTaxonomy):
             tax.annotate_from_orthoxml(op)
