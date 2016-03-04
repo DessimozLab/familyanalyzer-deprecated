@@ -162,7 +162,7 @@ class Writer(object):
     def __init__(self, folder, extractor):
         if os.path.exists(folder):
             if not os.path.isdir(folder):
-                raise FileExistsError(folder)
+                raise IOError("parameter folder points to an exiting file " + str(folder))
         else:
             os.mkdir(folder)
         self.outdir = folder
