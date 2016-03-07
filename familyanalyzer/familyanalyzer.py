@@ -285,6 +285,9 @@ class GeneFamily(object):
     def __eq__(self, other):
         return self._cmp() == other._cmp()
 
+    def __str__(self):
+        return self.root.get('og')
+
     def prefix_match(self, other):
         query = self._cmp()
         target = other._cmp()
@@ -717,16 +720,17 @@ class FamEvent(object):
     event = None
 
     def __init__(self, fam):
+        self.name = str(fam)
         self.fam = fam
 
     def __str__(self):
-        return "{}: {}\n".format(self.fam, self.event)
+        return "{}: {}\n".format(self.name, self.event)
 
     def __eq__(self, other):
-        return self.fam == other.fam and self.event == other.event
+        return self.name == other.name and self.event == other.event
 
     def __repr__(self):
-        return "{}: {}".format(self.fam, self.event)
+        return "{}: {}".format(self.name, self.event)
 
 
 class FamIdent(FamEvent):
@@ -753,9 +757,9 @@ class FamDupl(FamEvent):
     def __init__(self, fam, subfam):
         super().__init__(fam)
         if isinstance(subfam, list):
-            subfam_names = "; ".join([s.getFamId() for s in subfam])
+            subfam_names = "; ".join([str(s) for s in subfam])
         else:
-            subfam_names = subfam.getFamId()
+            subfam_names = str(subfam)
         self.into = subfam_names
         self.subfams = subfam
 
@@ -810,16 +814,11 @@ class LevelComparisonResult(object):
     @staticmethod
     def sort_key(item):
 
-        if isinstance(item.fam, str):
-            fam = item.fam
-        else:
-            fam = item.fam.getFamId()
-
-        if fam == 'n/a':
+        if item.name == 'n/a':
             return (MAXINT,)
 
         return tuple((int(num) if num else alpha) for
-                    (num, alpha) in re.findall(r'(\d+)|(\D+)', fam))
+                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.name))
 
     def group_sort_key(self, item):
         return tuple(itertools.chain((self.group_key(item),),
@@ -851,10 +850,7 @@ class LevelComparisonResult(object):
         return sorted(self.fams_dict.values(), key=self.sort_key)
 
     def addFamily(self, famEvent):
-        if isinstance(famEvent.fam, str):
-            self.fams_dict[famEvent.fam] = famEvent
-        else:
-            self.fams_dict[famEvent.fam.getFamId()] = famEvent
+            self.fams_dict[famEvent.name] = famEvent
 
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
