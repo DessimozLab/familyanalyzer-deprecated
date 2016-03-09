@@ -240,7 +240,7 @@ class TwoLineageComparisons(unittest.TestCase):
         for i in range(len(levPairs)):
             lev1, lev2 = levPairs[i]
             comp = self.compareLevels(lev1, lev2)
-            comp.fams.sort(key=lambda x: x.fam)
+            comp.fams.sort(key=lambda x: x.name)
             self.assertListEqual(comp.fams, expRes[i], 'failed for {} vs {}'.format(lev1, lev2))
 
     def test_summarise(self):
@@ -278,7 +278,7 @@ class TwoLineageComparisons(unittest.TestCase):
         for i in range(len(levPairs)):
             lev1, lev2 = levPairs[i]
             comp = self.compareLevelsSingletonAware(lev1, lev2)
-            comp.fams.sort(key=lambda x: x.fam)
+            comp.fams.sort(key=lambda x: x.name)
             self.assertListEqual(comp.fams, expRes[i], 'failed for {} vs {}'.format(lev1, lev2))
 
     def test_summarise_singleton_aware(self):

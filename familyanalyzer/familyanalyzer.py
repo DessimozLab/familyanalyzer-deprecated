@@ -285,6 +285,9 @@ class GeneFamily(object):
     def __eq__(self, other):
         return self._cmp() == other._cmp()
 
+    def __str__(self):
+        return self.root.get('og')
+
     def prefix_match(self, other):
         query = self._cmp()
         target = other._cmp()
@@ -664,8 +667,7 @@ class Comparer(object):
             self.advance_i2()
             if self.f2 is None:
                 break
-        self.comp.addFamily(FamDupl(self.f1.getFamId(),
-            '; '.join(gf.getFamId() for gf in m)))
+        self.comp.addFamily(FamDupl(self.f1, m))
         self.advance_i1()
 
     def lost(self):
@@ -718,16 +720,17 @@ class FamEvent(object):
     event = None
 
     def __init__(self, fam):
+        self.name = str(fam)
         self.fam = fam
 
     def __str__(self):
-        return "{}: {}\n".format(self.fam, self.event)
+        return "{}: {}\n".format(self.name, self.event)
 
     def __eq__(self, other):
-        return self.fam == other.fam and self.event == other.event
+        return self.name == other.name and self.event == other.event
 
     def __repr__(self):
-        return "{}: {}".format(self.fam, self.event)
+        return "{}: {}".format(self.name, self.event)
 
 
 class FamIdent(FamEvent):
@@ -754,15 +757,39 @@ class FamDupl(FamEvent):
     def __init__(self, fam, subfam):
         super().__init__(fam)
         if isinstance(subfam, list):
-            subfam = "; ".join(subfam)
-        self.into = subfam
+            subfam_names = "; ".join([str(s) for s in subfam])
+        else:
+            subfam_names = str(subfam)
+        self.into = subfam_names
+        self.subfams = subfam
 
     def __str__(self):
-        return "{} --> {}\n".format(self.fam, self.into)
+        return self.write()
 
     def __eq__(self, other):
         return super().__eq__(other) and self.into == other.into
 
+    def write(self):
+        ''' Construct output for printing. Shows the ids of the duplicated
+            GeneFamily and the resulting subfamilies. It also lists the
+            members of the original GeneFamily and the new subfamilies.
+            Sample output:
+            -------
+            114 --> 114.2a; 114.2b
+            114: 47953; 28082; 11418; 29862; 117; 50097; 13634; 50845; 14300
+            114.2a: 50097; 13634
+            114.2b: 50845; 14300
+            -------
+        '''
+        output = "-------\n"
+        output += ("{} --> {}\n".format(self.fam.getFamId(), self.into))
+        members = "; ".join(self.fam.getMemberGenes())
+        output += ("{}: {}\n".format(self.fam.getFamId(), members))
+        for group in self.subfams:
+            members = "; ".join(group.getMemberGenes())
+            output += ("{}: {}\n".format(group.getFamId(), members))
+        output += ("-------\n")
+        return output
 
 class LevelComparisonResult(object):
 
@@ -786,10 +813,12 @@ class LevelComparisonResult(object):
 
     @staticmethod
     def sort_key(item):
-        if item.fam == 'n/a':
+
+        if item.name == 'n/a':
             return (MAXINT,)
+
         return tuple((int(num) if num else alpha) for
-                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.fam))
+                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.name))
 
     def group_sort_key(self, item):
         return tuple(itertools.chain((self.group_key(item),),
@@ -821,7 +850,7 @@ class LevelComparisonResult(object):
         return sorted(self.fams_dict.values(), key=self.sort_key)
 
     def addFamily(self, famEvent):
-        self.fams_dict[famEvent.fam] = famEvent
+            self.fams_dict[famEvent.name] = famEvent
 
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
