@@ -6,7 +6,7 @@ from future.builtins import str
 from future import standard_library
 standard_library.install_hooks()
 import re
-from .tools import PROGRESSBAR, setup_progressbar
+from .tools import PROGRESSBAR, Queue, setup_progressbar
 
 
 class GeneTreeNodeException(Exception):
@@ -70,6 +70,9 @@ class GeneTreeNode(object):
     def is_leaf(self):
         return len(self.children) == 0
 
+    def is_inner(self):
+        return not self.is_leaf()
+
     def __iter__(self):
         yield self
         for ch in self.children:
@@ -83,9 +86,9 @@ class GeneTreeNode(object):
         NHX_string = '&&NHX'
         event, duplication = self.events[self.node_type]
 
-        if self.node_type is not 'leaf':
+        if self.node_type != 'leaf':
             NHX_string += ':Ev={0}'.format(event)
-            if self.node_type is not 'loss':
+            if self.node_type != 'loss':
                 NHX_string += ':D={0}'.format(duplication)
         if self.taxonomic_level > '':
             NHX_string += ':S={0}'.format(self.taxonomic_level)
@@ -137,6 +140,42 @@ class GeneTreeNode(object):
             subtree = ', '.join(child.write(NHX) for child in self.children)
             return '({0}){1}{2}'.format(subtree, name, (NHX_string if NHX else ''))
 
+    def iter_preorder(self):
+        """ Traverse the tree in preorder ordering: ancestors before
+        descendents """
+        yield self
+        for child in self.children:
+            for elem in child.iter_preorder():
+                yield elem
+
+    def iter_postorder(self):
+        """ Traverse the tree in postorder ordering: descendents before
+        ancestors """
+        for child in self.children:
+            for elem in child.iter_postorder():
+                yield elem
+        yield self
+
+    def iter_levelorder(self):
+        """ Traverse the tree in levelorder ordering: first the root, then
+        nodes at distance==1 from the root, then distance==2, etc. """
+        q = Queue()
+        q.enqueue(self)
+        while q:
+            node = q.dequeue()
+            yield node
+            for child in node.children:
+                q.enqueue(child)
+
+    def iter_leaves(self):
+        for elem in self.iter_preorder():
+            if elem.is_leaf():
+                yield elem
+
+    def iter_inner_nodes(self):
+        for elem in self.iter_preorder():
+            if elem.is_inner():
+                yield elem
 
 class GeneTreeTracer(object):
     def __init__(self, parser, taxonomy):

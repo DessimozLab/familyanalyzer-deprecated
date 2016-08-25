@@ -13,6 +13,8 @@ try:
 except ImportError:
     PROGRESSBAR = False
 
+from collections import deque
+
 def setup_progressbar(msg, size):
     if not msg.endswith(': '):
         msg += ': '
@@ -74,3 +76,32 @@ def py2_iterable(Class):
         setattr(Class, 'next', next_method)
 
     return Class
+
+
+@py2_iterable
+class Queue(object):
+
+    def __init__(self):
+        self.__queue = deque()
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return len(self.__queue)
+
+    def __next__(self):
+        if self.isempty():
+            raise StopIteration
+        return self.dequeue()
+
+    def enqueue(self, item):
+        self.__queue.append(item)
+
+    def dequeue(self):
+        if self.isempty():
+            raise Exception('empty queue')
+        return self.__queue.popleft()
+
+    def isempty(self):
+        return len(self.__queue) == 0
