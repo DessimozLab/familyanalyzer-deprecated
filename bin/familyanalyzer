@@ -131,6 +131,7 @@ def main():
         tax = fa.TaxonomyFactory.newTaxonomy(args.taxonomy)
         if isinstance(tax, NewickTaxonomy):
             tax.annotate_from_orthoxml(op)
+            tax.finialize_init()
 
     if args.show_taxonomy:
         print("Use following taxonomy")

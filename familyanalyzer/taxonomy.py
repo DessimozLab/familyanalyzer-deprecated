@@ -51,6 +51,10 @@ class Taxonomy(object):
     def __getitem__(self, node_name):
         return self.hierarchy[node_name]
 
+    def finialize_init(self):
+        self.extract_descendent_species()
+        self.extract_younger_nodes()
+
     def iterParents(self, node, stopBefore=None):
         """iterates over all the taxonomy nodes towards the root
         which are above 'node' and below 'stopBefore'."""
@@ -247,6 +251,22 @@ class Taxonomy(object):
         fd.close()
         return res
 
+    def extract_descendent_species(self):
+        """
+        Caches some frequently looked-up information - descendent leaves of every node
+        """
+        self.descendents = {}
+        for k, v in self.hierarchy.items():
+            self.descendents[k] = set(l.name for l in v.iter_leaves())
+
+    def extract_younger_nodes(self):
+        """
+        Caches some frequently looked-up information - descendent nodes of every node
+        """
+        self.younger_nodes = {}
+        for k, v in self.hierarchy.items():
+            self.younger_nodes[k] = set(n.name for n in v.iter_preorder())
+
 
 class LinearTaxonomy(Taxonomy):
     """ Linear taxonomy """
@@ -344,8 +364,7 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         self.extractAdjacencies()
         self.bloat_all()
         self.extractHierarchy()
-        self.extractDescendentSpecies()
-        self.extractYoungerNodes()
+        self.finialize_init()
 
     def _parseParentChildRelsR(self, grp):
         levels = None
@@ -558,6 +577,7 @@ class NewickTaxonomy(Taxonomy):
         self.hierarchy = {}
         self.stack = []
         self.parse()
+        self.finialize_init()
 
     def _get_label(self, tokens):
         """ Get the node data attributes 'label' and 'length'. Assumes these
