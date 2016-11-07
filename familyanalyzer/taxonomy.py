@@ -2,6 +2,9 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
+import numbers
+
 from future.builtins import range
 from future.builtins import next
 from future.builtins import dict
@@ -47,6 +50,10 @@ class Taxonomy(object):
 
     def __getitem__(self, node_name):
         return self.hierarchy[node_name]
+
+    def finialize_init(self):
+        self.extract_descendent_species()
+        self.extract_younger_nodes()
 
     def iterParents(self, node, stopBefore=None):
         """iterates over all the taxonomy nodes towards the root
@@ -244,6 +251,22 @@ class Taxonomy(object):
         fd.close()
         return res
 
+    def extract_descendent_species(self):
+        """
+        Caches some frequently looked-up information - descendent leaves of every node
+        """
+        self.descendents = {}
+        for k, v in self.hierarchy.items():
+            self.descendents[k] = set(l.name for l in v.iter_leaves())
+
+    def extract_younger_nodes(self):
+        """
+        Caches some frequently looked-up information - descendent nodes of every node
+        """
+        self.younger_nodes = {}
+        for k, v in self.hierarchy.items():
+            self.younger_nodes[k] = set(n.name for n in v.iter_preorder())
+
 
 class LinearTaxonomy(Taxonomy):
     """ Linear taxonomy """
@@ -341,8 +364,7 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
         self.extractAdjacencies()
         self.bloat_all()
         self.extractHierarchy()
-        self.extractDescendentSpecies()
-        self.extractYoungerNodes()
+        self.finialize_init()
 
     def _parseParentChildRelsR(self, grp):
         levels = None
@@ -416,46 +438,32 @@ class TaxRangeOrthoXMLTaxonomy(Taxonomy):
                 return False
         return True
 
-    def extractDescendentSpecies(self):
-        """
-        Caches some frequently looked-up information - descendent leaves of every node
-        """
-        self.descendents = {}
-        for k, v in self.hierarchy.items():
-            self.descendents[k] = set(l.name for l in v.iter_leaves())
-
-    def extractYoungerNodes(self):
-        """
-        Caches some frequently looked-up information - descendent nodes of every node
-        """
-        self.younger_nodes = {}
-        for k, v in self.hierarchy.items():
-            self.younger_nodes[k] = set(n.name for n in v.iter_preorder())
-
 
 class TaxNode(object):
 
     reg = re.compile(r'\W') # matches anything that's NOT a-z, A-Z, 0-9 or _
 
-    def __init__(self, name):
+    def __init__(self, name, branch_length=None):
         self.name = name
         self.up = None
         self.down = list()
         self.history = None
         self.comparison = None
+        self.branch_length = branch_length
 
     def __str__(self):
         if self.reg.search(self.name):
             label = '"{}"'.format(self.name)
         else:
             label = self.name
+        branch_len_str = ":{}".format(self.branch_length) if self.branch_length else ""
 
         NHX = self._get_node_NHX() + self._get_edge_NHX()
         if self.is_leaf():
-            return '{0}{1}'.format(label,
+            return '{0}{1}{2}'.format(label, branch_len_str,
                             ('[&&NHX{0}]'.format(NHX) if NHX > '' else ''))
         subtree = ', '.join(str(ch) for ch in self.down)
-        return '({0}){1}{2}'.format(subtree, label,
+        return '({0}){1}{2}{3}'.format(subtree, label, branch_len_str,
                             ('[&&NHX{0}]'.format(NHX) if NHX > '' else ''))
 
     def _get_node_NHX(self):
@@ -569,6 +577,7 @@ class NewickTaxonomy(Taxonomy):
         self.hierarchy = {}
         self.stack = []
         self.parse()
+        self.finialize_init()
 
     def _get_label(self, tokens):
         """ Get the node data attributes 'label' and 'length'. Assumes these
@@ -585,7 +594,8 @@ class NewickTaxonomy(Taxonomy):
             raise ParseError('Expected a length, found {0}'.format(
                 length))
 
-        return (label.val if label.typ == tokens.LABEL else None)
+        return (label.val if label.typ == tokens.LABEL else None,
+                length.val if length.typ == tokens.LENGTH else None)
 
     def annotate_from_orthoxml(self, xmlparser):
         """ Transfers internal node names from OMA orthoxml """
@@ -660,9 +670,9 @@ class NewickTaxonomy(Taxonomy):
                 self.stack.append(n)
 
             elif token.typ == tokens.LEAF:
-                label = self._get_label(tokens)
+                label, branch_len = self._get_label(tokens)
                 self.nodes.add(label)
-                l = TaxNode(label)
+                l = TaxNode(label, branch_len)
 
                 # get parent from stack
                 p = self.stack[-1]
@@ -670,7 +680,7 @@ class NewickTaxonomy(Taxonomy):
                 l.add_parent(p)
 
             elif token.typ == tokens.ENDSUB:
-                label = self._get_label(tokens)
+                label, branch_len = self._get_label(tokens)
 
                 # retrieve node from stack
                 subtree = self.stack.pop()
@@ -678,6 +688,8 @@ class NewickTaxonomy(Taxonomy):
                 # update node name
                 if isinstance(label, str):
                     subtree.name = label
+                if isinstance(branch_len, numbers.Number):
+                    subtree.branch_length = branch_len
 
             elif token.typ == tokens.ENDTREE:  # trigger for tree-finalising functions
                 self.populate(self.root)

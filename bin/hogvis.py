@@ -133,9 +133,9 @@ class Writer(object):
  <script src="http://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js"></script>
 
  <!-- TnT -->
- <link rel="stylesheet" href="http://cbrg-oma.ethz.ch/static/css/tnt.css" type="text/css" />
- <script src="http://cbrg-oma.ethz.ch/static/js/tnt.js"></script>
- <script src="http://cbrg-oma.ethz.ch/static/js/hog.js"></script>
+ <link rel="stylesheet" href="http://omabrowser.org/static/css/tnt.css" type="text/css" />
+ <script src="http://omabrowser.org/static/js/tnt.js"></script>
+ <script src="http://omabrowser.org/static/js/hog.js"></script>
 
   <h1>HOG Viewer for $name</h1>
   <div id="hog_tree"></div>
@@ -336,11 +336,12 @@ class WriterTest(unittest.TestCase):
 
 def handle_args():
     import argparse
-    parser = argparse.ArgumentParser(prog='StandaloneHogVis',
-                                     description="Tool to prepare HogVis html pages to analyze the HOGs graphically")
-    parser.add_argument('-o', '--outdir', default='hogvis', help="directory where to store the html files."
-                                                                 "(defaults: 'vis/')")
-    parser.add_argument('orthoxml', help="path to the orthoxml file that should be converted")
+    parser = argparse.ArgumentParser(
+        description="Tool to prepare HogVis html pages to analyze the HOGs graphically")
+    parser.add_argument('-o', '--outdir', default='hogvis',
+                        help="directory where to store the html files. (defaults: 'vis/')")
+    parser.add_argument('orthoxml',
+                        help="path to the orthoxml file that should be converted")
 
     conf = parser.parse_args()
 
