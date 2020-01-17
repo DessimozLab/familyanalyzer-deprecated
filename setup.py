@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name=name,
-    version='0.5.1',
+    version='0.6.0',
     author='Adrian Altenhoff',
     author_email='adrian.altenhoff@inf.ethz.ch',
     description='A tool to analyse gene family evolution from orthoxml',
