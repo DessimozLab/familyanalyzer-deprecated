@@ -111,7 +111,7 @@ class OrthoXMLParser(object):
 
         return OrthoXMLQuery.getGroupsAtLevel(level, root)
 
-    def get_species_below_node(self, node):
+    def get_species_below_node(self, node, return_gene_total_count=False):
         """ return a set of all species that have a geneRef present beneath
         the specified node
 
@@ -121,7 +121,10 @@ class OrthoXMLParser(object):
         generef_nodes = OrthoXMLQuery.getGeneRefNodes(node)
         species_covered = {self.mapGeneToSpecies(gr.get('id'))
                            for gr in generef_nodes}
-        return species_covered
+        if return_gene_total_count:
+            return species_covered, len(generef_nodes)
+        else:
+            return species_covered
 
     @classmethod
     def is_ortholog_group(cls, element):
@@ -943,16 +946,15 @@ class GroupAnnotator(object):
     def _addTaxRangeR(self, node, noUpwardLevels=False):
         """recursive method to add TaxRange property tags."""
         if self.parser.is_ortholog_group(node) or self.parser.is_paralog_group(node) or OrthoXMLQuery.is_geneRef_node(node):
-            species_covered = self.parser.get_species_below_node(node)
+            species_covered, nr_genes = self.parser.get_species_below_node(node, return_gene_total_count=True)
             current_level = self.tax.mrca(species_covered)
             og_tag = '{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0'])
 
-            try: # find the closest ancestral orthogroup that has a TaxRange property
-                parent_orthogroup_generator = (n for n in node.iterancestors('{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0']))
-                                               if n[0].tag == '{{{}}}property'.format(OrthoXMLQuery.ns['ns0']))
-                parent_orthogroup = next(parent_orthogroup_generator)
-            except: # couldn't find a parent with a TaxRange property; no extra annotation possible
-                parent_orthogroup = None
+            if self.parser.is_ortholog_group(node):
+                comp_score = OrthoXMLQuery.getScoreNodes(node, 'CompletenessScore')
+                if len(comp_score) == 0:
+                    node.append(self._createCompletnessScoreTag(current_level, species_covered))
+                node.append(self._createNrMemberGeneTag(nr_genes))
 
             try:  # find the closest ancestral orthogroup if it has a TaxRange property
                 parent_orthogroup = next(node.iterancestors(og_tag))
@@ -972,30 +974,45 @@ class GroupAnnotator(object):
                 # Paralog Node - insert ortholog node between self and parent; add missing tax range(s) to new parent
                 elif self.parser.is_paralog_group(node):
                     if self.tax.levels_between(most_recent_parent_level, current_level) > 1:
-                        self._insertOG(node.getparent(), node, current_level, most_recent_parent_level, include_self=False)
+                        self._insertOG(node.getparent(), node, current_level, most_recent_parent_level,
+                                       nr_genes, species_covered, include_self=False)
 
                 # GeneRef Node - insert ortholog node between self and parent; add all tax range(s) to new parent
                 else:
-                    self._insertOG(node.getparent(), node, current_level, most_recent_parent_level, include_self=True)
+                    self._insertOG(node.getparent(), node, current_level, most_recent_parent_level,
+                                   nr_genes, species_covered, include_self=True)
                     return
 
             for child in node:
                 self._addTaxRangeR(child, noUpwardLevels)
 
-    def _insertOG(self, parent, child, specificLev, beforeLev,
-                  include_self=True):
+    def _insertOG(self, parent, child, specificLev, beforeLev, nr_genes, covered_speices, include_self=True):
         pos = parent.index(child)
         el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
+        el.append(self._createNrMemberGeneTag(nr_genes))
         if include_self:
-            el.append(self._createTaxRangeTag(specificLev))
+            el.append(self._createTaxRangeTag(specificLev,
+                                              CompletenessScore=self.completenessScore(specificLev, covered_speices)))
         for lev in self.tax.iterParents(specificLev, stopBefore=beforeLev):
-            el.append(self._createTaxRangeTag(lev))
+            el.append(self._createTaxRangeTag(lev, CompletenessScore=self.completenessScore(lev, covered_speices)))
         el.append(child)
         parent.insert(pos, el)
 
-    def _createTaxRangeTag(self, lev):
+    def _createTaxRangeTag(self, lev, **kwargs):
         return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
-                             attrib=dict(name='TaxRange', value=lev))
+                             attrib=dict(name='TaxRange', value=lev, **kwargs))
+
+    def _createNrMemberGeneTag(self, nr_genes):
+        return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
+                             attrib={"name": "NrMemberGenes", "value": str(nr_genes)})
+
+    def completenessScore(self, level, covered_species):
+        return "{:.3f}".format(len(covered_species) / len(self.tax.descendents[level]))
+
+    def _createCompletnessScoreTag(self, level, covered_species):
+        el = etree.Element('{{{ns0}}}score'.format(**self.parser.ns),
+                           attrib={"CompletenessScore": self.completenessScore(level, covered_species)})
+        return el
 
     def annotateMissingTaxRanges(self, tax, propagate_top=False, verbosity=0):
         """This function adds left-out taxrange property elements to
