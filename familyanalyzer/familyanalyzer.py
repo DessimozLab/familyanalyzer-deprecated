@@ -1011,7 +1011,8 @@ class GroupAnnotator(object):
 
     def _createCompletnessScoreTag(self, level, covered_species):
         el = etree.Element('{{{ns0}}}score'.format(**self.parser.ns),
-                           attrib={"CompletenessScore": self.completenessScore(level, covered_species)})
+                           attrib={"id": "CompletenessScore",
+                                   "value": self.completenessScore(level, covered_species)})
         return el
 
     def annotateMissingTaxRanges(self, tax, propagate_top=False, verbosity=0):
