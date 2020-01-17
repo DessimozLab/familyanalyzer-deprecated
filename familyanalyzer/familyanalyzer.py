@@ -945,6 +945,7 @@ class GroupAnnotator(object):
         if self.parser.is_ortholog_group(node) or self.parser.is_paralog_group(node) or OrthoXMLQuery.is_geneRef_node(node):
             species_covered = self.parser.get_species_below_node(node)
             current_level = self.tax.mrca(species_covered)
+            og_tag = '{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0'])
 
             try: # find the closest ancestral orthogroup that has a TaxRange property
                 parent_orthogroup_generator = (n for n in node.iterancestors('{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0']))
@@ -953,9 +954,14 @@ class GroupAnnotator(object):
             except: # couldn't find a parent with a TaxRange property; no extra annotation possible
                 parent_orthogroup = None
 
-            if parent_orthogroup is not None:
+            try:  # find the closest ancestral orthogroup if it has a TaxRange property
+                parent_orthogroup = next(node.iterancestors(og_tag))
                 parent_levels = {z.get('value')
                                  for z in OrthoXMLQuery.getTaxRangeNodes(parent_orthogroup, False)}
+            except StopIteration:  # couldn't find a parent with a TaxRange property; no extra annotation possible
+                parent_levels = set([])
+
+            if len(parent_levels) > 0:
                 most_recent_parent_level = self.tax.mostSpecific(parent_levels)
 
                 # Ortholog Node - append missing tax range(s) as property tags under the current node
