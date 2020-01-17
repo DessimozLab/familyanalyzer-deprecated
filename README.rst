@@ -1,3 +1,12 @@
+
+
+WARNING:
+========
+Family-Analyzer is outdated and have been replace by pyHam 
+available at https://github.com/DessimozLab/pyham . 
+
+
+
 Family-Analyzer: summarize gene family evolution from orthoxml 
 ==============================================================
 
