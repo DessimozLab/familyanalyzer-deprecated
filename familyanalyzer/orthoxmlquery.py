@@ -111,3 +111,12 @@ class OrthoXMLQuery(object):
         else:
             xquery = '//ns:geneRef'
         return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
+
+    @classmethod
+    def getScoreNodes(cls, root, score_id=None):
+        """returns the associated score nodes for a certain (orthologGroup) node.
+        If score_id is not specified, all scores will be returned"""
+        xquery = './ns:score'
+        if score_id is not None:
+            xquery += "[@id='{}']".format(score_id)
+        return root.xpath(xquery, namespaces={'ns': cls.ns['ns0']})
