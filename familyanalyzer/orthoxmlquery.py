@@ -35,6 +35,12 @@ class OrthoXMLQuery(object):
         return root.findall(xquery)
 
     @classmethod
+    def getTaxidNodes(cls, root, recursively=True):
+        xPrefix = ".//" if recursively else "./"
+        xquery = '{}{{{}}}property[@name="taxid"]'.format(xPrefix, cls.ns['ns0'])
+        return root.findall(xquery)
+
+    @classmethod
     def getGeneRefNodes(cls, root, recursively=True):
         iterfn = root.iter if recursively else root.iterchildren
         iterator = iterfn('{{{}}}geneRef'.format(cls.ns['ns0']))
