@@ -1121,7 +1121,7 @@ class GroupAnnotator(object):
             new_node = etree.Element('{{{ns0}}}orthologGroup'.format(
                 **self.parser.ns),
                 id=str(fam_num))
-            new_node.append(self._createTaxRangeTags(species))
+            new_node.extend(self._createTaxRangeTags(species))
             new_node.append(etree.Element('{{{ns0}}}geneRef'.format(
                 **self.parser.ns),
                 id=gene))
