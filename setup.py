@@ -9,7 +9,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as fh:
 
 setup(
     name=name,
-    version='0.7.0',
+    version='0.7.1',
     author='Adrian Altenhoff',
     author_email='adrian.altenhoff@inf.ethz.ch',
     description='A tool to analyse gene family evolution from orthoxml',
