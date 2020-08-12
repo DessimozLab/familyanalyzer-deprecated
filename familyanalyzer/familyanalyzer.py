@@ -9,10 +9,10 @@ from future.builtins import dict
 from future.builtins import int
 from future.builtins import str
 from future import standard_library
+
 standard_library.install_hooks()
 
-
-#!/usr/bin/env python
+# !/usr/bin/env python
 #
 #  This scripts has the purpose of analyzing an orthoXML file.
 #  It does so by providing several methods operating on the file.
@@ -33,7 +33,7 @@ MAXINT = sys.maxsize
 
 
 class OrthoXMLParser(object):
-    ns = {"ns0": "http://orthoXML.org/2011/"}   # xml namespace
+    ns = {"ns0": "http://orthoXML.org/2011/"}  # xml namespace
 
     def __init__(self, filename):
         """creates a OrthoXMLParser object. the parameter filename
@@ -44,7 +44,7 @@ class OrthoXMLParser(object):
         self.tax = None
         self.singletons = None
 
-        self._buildMappings()   # builds three dictionaries - see def below
+        self._buildMappings()  # builds three dictionaries - see def below
 
     def write(self, filename, **kwargs):
         """Write out the (modified) orthoxml file into a new file.
@@ -115,7 +115,9 @@ class OrthoXMLParser(object):
         """ return a set of all species that have a geneRef present beneath
         the specified node
 
-        :param root: Node of interest
+        :param node: Node of interest
+        :param return_gene_total_count: boolean flag whether or not to return
+               the number of genes below this node.
         :return:
         """
         generef_nodes = OrthoXMLQuery.getGeneRefNodes(node)
@@ -193,7 +195,7 @@ class OrthoXMLParser(object):
     def getUbiquitusFamilies(self, minCoverage=.5):
         families = self.getToplevelGroups()
         return [x for x in families if len(self.getGenesPerSpeciesInFam(x)) >=
-                minCoverage*len(self.getSpeciesSet())]
+                minCoverage * len(self.getSpeciesSet())]
 
     def getLevels(self):
         return self._levels
@@ -265,6 +267,7 @@ class GeneFamily(object):
     """GeneFamily(root_element)
 
     Represents one gene family rooted at an orthologous group. """
+
     def __init__(self, root_element):
         if not OrthoXMLParser.is_ortholog_group(root_element):
             raise ElementError('Not an orthologGroup node')
@@ -323,8 +326,8 @@ class GeneFamily(object):
         """
         fam = self.getFamId()
         comp = tuple((0, int(num),) if num else (len(alpha.strip('.')),
-            alpha.strip('.'),) for (num, alpha) in re.findall(r'(\d+)|(\D+)',
-            fam))
+                                                 alpha.strip('.'),) for (num, alpha) in re.findall(r'(\d+)|(\D+)',
+                                                                                                   fam))
         return comp
 
     def getLevels(self):
@@ -383,7 +386,7 @@ class Singletons(GeneFamily):
     def getLevels(self):
         return None
 
-    def analyzeLevel(self, level, parser):
+    def analyzeLevel(self, level):
         return self
 
     def analyze(self, strategy):
@@ -440,8 +443,8 @@ class BasicLevelAnalysis(object):
         for spec in iter(spec2genes.keys()):
             nrMemb = len(spec2genes[spec])
             gclass = (self.GeneClasses.MULTICOPY
-                        if nrMemb > 1
-                        else self.GeneClasses.SINGLECOPY)
+                      if nrMemb > 1
+                      else self.GeneClasses.SINGLECOPY)
 
             summary[spec] = SummaryOfSpecies(self.GeneClasses.reverse[gclass],
                                              spec2genes[spec])
@@ -633,7 +636,7 @@ class Comparer(object):
         self.advance_i1()
         self.advance_i2()
         self.comp = LevelComparisonResult(fam_history_1.analyzedLevel,
-            fam_history_2.analyzedLevel)
+                                          fam_history_2.analyzedLevel)
 
     def run(self):
         while self.f1 is not None and self.f2 is not None:
@@ -683,10 +686,10 @@ class Comparer(object):
     def novel(self):
         while self.f1 > self.f2 and not self.f1.prefix_match(self.f2):
             _Event = (FamSingleton if self.f2.is_singleton()
-                      else FamNovel) # this check is probably redundant
-                                     # because there shouldn't be any
-                                     # singletons if l1 is not exhausted
-                                     # (singletons are always annotated last)
+                      else FamNovel)  # this check is probably redundant
+            # because there shouldn't be any
+            # singletons if l1 is not exhausted
+            # (singletons are always annotated last)
             self.comp.addFamily(_Event(self.f2.getFamId()))
             self.advance_i2()
             if self.f2 is None:
@@ -794,19 +797,19 @@ class FamDupl(FamEvent):
         output += ("-------\n")
         return output
 
-class LevelComparisonResult(object):
 
+class LevelComparisonResult(object):
     """
     Result of comparing two 'FamHistory' objects at different levels
     on the tree.
 
     """
 
-    groups = { 'identical': 0,
-               'duplicated': 1,
-               'lost': 2,
-               'novel': 3,
-               'singleton': 4}
+    groups = {'identical': 0,
+              'duplicated': 1,
+              'lost': 2,
+              'novel': 3,
+              'singleton': 4}
 
     groups_back = {0: 'identical',
                    1: 'duplicated',
@@ -821,7 +824,7 @@ class LevelComparisonResult(object):
             return (MAXINT,)
 
         return tuple((int(num) if num else alpha) for
-                    (num, alpha) in re.findall(r'(\d+)|(\D+)', item.name))
+                     (num, alpha) in re.findall(r'(\d+)|(\D+)', item.name))
 
     def group_sort_key(self, item):
         return tuple(itertools.chain((self.group_key(item),),
@@ -853,7 +856,7 @@ class LevelComparisonResult(object):
         return sorted(self.fams_dict.values(), key=self.sort_key)
 
     def addFamily(self, famEvent):
-            self.fams_dict[famEvent.name] = famEvent
+        self.fams_dict[famEvent.name] = famEvent
 
     def write(self, fd):
         fd.write("\nLevelComparisonResult between taxlevel {} and {}\n".
@@ -902,16 +905,17 @@ class GroupAnnotator(object):
 
     and adding additional property tags with skipped TaxRange levels."""
 
-    def __init__(self, parser):
+    def __init__(self, parser, taxrange_2_taxid=None):
         self.parser = parser
         self.ns = parser.ns
+        self.taxrange_2_taxid = {rng: str(val) for rng, val in taxrange_2_taxid.items()} if taxrange_2_taxid is not None else {}
 
     def _getNextSubId(self, idx):
         """helper method to return the next number at a given depth of
         duplication (idx)"""
         while len(self.dupCnt) < idx:
             self.dupCnt.append(0)
-        self.dupCnt[idx-1] += 1
+        self.dupCnt[idx - 1] += 1
         return self.dupCnt[idx - 1]
 
     def _encodeParalogClusterId(self, prefix, nr):
@@ -919,11 +923,11 @@ class GroupAnnotator(object):
         for 3 paralogGroups next to each other. the nr argument
         identifies the individual indices of those 3 paralogGroups."""
         letters = []
-        while nr//26 > 0:
+        while nr // 26 > 0:
             letters.append(chr(97 + (nr % 26)))
-            nr = nr//26 - 1
+            nr = nr // 26 - 1
         letters.append(chr(97 + (nr % 26)))
-        return prefix+''.join(letters[::-1])  # letters were in reverse order
+        return prefix + ''.join(letters[::-1])  # letters were in reverse order
 
     def _annotateGroupR(self, node, og, idx=0):
         """create the og attributes at the orthologGroup elements
@@ -932,7 +936,11 @@ class GroupAnnotator(object):
         but propagate their sub-names for the subsequent orthologGroup
         elements."""
         if self.parser.is_ortholog_group(node):
-            node.set('og', og)
+            taxid_node = OrthoXMLQuery.getTaxidNodes(node, recursively=False)
+            if len(taxid_node) > 0:
+                node.set('id', '{}_{}'.format(og, taxid_node[0].get('value')))
+            else:
+                node.set('og', og)
             for child in list(node):
                 self._annotateGroupR(child, og, idx)
         elif self.parser.is_paralog_group(node):
@@ -945,7 +953,8 @@ class GroupAnnotator(object):
 
     def _addTaxRangeR(self, node, noUpwardLevels=False):
         """recursive method to add TaxRange property tags."""
-        if self.parser.is_ortholog_group(node) or self.parser.is_paralog_group(node) or OrthoXMLQuery.is_geneRef_node(node):
+        if self.parser.is_ortholog_group(node) or self.parser.is_paralog_group(node) \
+                or OrthoXMLQuery.is_geneRef_node(node):
             species_covered, nr_genes = self.parser.get_species_below_node(node, return_gene_total_count=True)
             current_level = self.tax.mrca(species_covered)
             og_tag = '{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0'])
@@ -955,6 +964,24 @@ class GroupAnnotator(object):
                 if len(comp_score) == 0:
                     node.append(self._createCompletnessScoreTag(current_level, species_covered))
                 node.append(self._createNrMemberGeneTag(nr_genes))
+                taxrange = OrthoXMLQuery.getTaxRangeNodes(node, False)
+                taxid = OrthoXMLQuery.getTaxidNodes(node, False)
+                if len(taxrange) > 0:
+                    # check consistency between current_level and value stored in taxrange
+                    if taxrange[0].get('value') != current_level:
+                        raise Exception("Inconsistent TaxRange: {} vs current_level {}"
+                                        .format(taxrange[0].get('value'), current_level))
+                    if len(taxid) > 0:
+                        if taxid[0].get('value') != self.taxrange_2_taxid[current_level]:
+                            raise Exception("Inconsitency between taxids: {} vs {}"
+                                            .format(taxid[0].get('value'), self.taxrange_2_taxid[current_level]))
+                    else:
+                        try:
+                            node.append(self._create_taxid(current_level))
+                        except KeyError:
+                            pass
+                else:
+                    node.append(self._createTaxRangeTags(current_level))
 
             try:  # find the closest ancestral orthogroup if it has a TaxRange property
                 parent_orthogroup = next(node.iterancestors(og_tag))
@@ -968,39 +995,56 @@ class GroupAnnotator(object):
 
                 # Ortholog Node - append missing tax range(s) as property tags under the current node
                 if self.parser.is_ortholog_group(node):
-                    for level in self.tax.iterParents(current_level, most_recent_parent_level):
-                        node.append(self._createTaxRangeTag(level))
+                    self._insertOGs_between(node.getparent(), node, current_level, most_recent_parent_level, nr_genes,
+                                            species_covered, include_self=False)
 
                 # Paralog Node - insert ortholog node between self and parent; add missing tax range(s) to new parent
                 elif self.parser.is_paralog_group(node):
                     if self.tax.levels_between(most_recent_parent_level, current_level) > 1:
-                        self._insertOG(node.getparent(), node, current_level, most_recent_parent_level,
-                                       nr_genes, species_covered, include_self=False)
+                        self._insertOGs_between(node.getparent(), node, current_level, most_recent_parent_level,
+                                                nr_genes, species_covered, include_self=False)
 
                 # GeneRef Node - insert ortholog node between self and parent; add all tax range(s) to new parent
                 else:
-                    self._insertOG(node.getparent(), node, current_level, most_recent_parent_level,
-                                   nr_genes, species_covered, include_self=True)
+                    self._insertOGs_between(node.getparent(), node, current_level, most_recent_parent_level,
+                                            nr_genes, species_covered, include_self=True)
                     return
 
             for child in node:
                 self._addTaxRangeR(child, noUpwardLevels)
 
-    def _insertOG(self, parent, child, specificLev, beforeLev, nr_genes, covered_speices, include_self=True):
+    def _insertOGs_between(self, parent, child, specificLev, beforeLev, nr_genes, covered_species, include_self=True):
         pos = parent.index(child)
-        el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
-        el.append(self._createNrMemberGeneTag(nr_genes))
         if include_self:
-            el.append(self._createTaxRangeTag(specificLev,
-                                              CompletenessScore=self.completenessScore(specificLev, covered_speices)))
+            child = self._insert_one_OG(child, specificLev, covered_species, nr_genes)
         for lev in self.tax.iterParents(specificLev, stopBefore=beforeLev):
-            el.append(self._createTaxRangeTag(lev, CompletenessScore=self.completenessScore(lev, covered_speices)))
-        el.append(child)
-        parent.insert(pos, el)
+            child = self._insert_one_OG(child, lev, covered_species=covered_species, nr_genes=nr_genes)
+        parent.insert(pos, child)
 
-    def _createTaxRangeTag(self, lev, **kwargs):
+    def _insert_one_OG(self, child, level, covered_species, nr_genes):
+        el = etree.Element('{{{ns0}}}orthologGroup'.format(**self.parser.ns))
+        el.append(self._createCompletnessScoreTag(level, covered_species))
+        el.extend(self._createTaxRangeTags(level))
+        el.append(self._createNrMemberGeneTag(nr_genes))
+        el.append(child)
+        return el
+
+    def _createTaxRangeTags(self, lev, **kwargs):
+        tags = [self._create_tax_range(lev, **kwargs)]
+        try:
+            tags.append(self._create_taxid(lev))
+        except KeyError:
+            pass
+        return tags
+
+    def _create_tax_range(self, lev, **kwargs):
         return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
                              attrib=dict(name='TaxRange', value=lev, **kwargs))
+
+    def _create_taxid(self, lev):
+        return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
+                             attrib=dict(name='taxid',
+                                         value=self.taxrange_2_taxid[lev]))
 
     def _createNrMemberGeneTag(self, nr_genes):
         return etree.Element('{{{ns0}}}property'.format(**self.parser.ns),
@@ -1029,7 +1073,7 @@ class GroupAnnotator(object):
             pbar = setup_progressbar(
                 'Adding missing taxonomy annotation: ',
                 len(top_level_groups)
-                )
+            )
             pbar.start()
 
         for i, fam in enumerate(top_level_groups, start=1):
@@ -1056,8 +1100,9 @@ class GroupAnnotator(object):
             pbar.start()
 
         highest_group = max(self.parser.getToplevelGroups(),
-                            key=lambda x: int(x.get('id'))) # TODO: If top-level orthologNodes have no id field this errors out
-        input_genes = set(n.get('id') for n in              # Maybe add code to enumerate OG nodes if ids are missing?
+                            key=lambda x: int(
+                                x.get('id')))  # TODO: If top-level orthologNodes have no id field this errors out
+        input_genes = set(n.get('id') for n in  # Maybe add code to enumerate OG nodes if ids are missing?
                           OrthoXMLQuery.getInputGenes(self.parser.root))
         grouped_genes = set(n.get('id') for n in
                             OrthoXMLQuery.getGroupedGenes(self.parser.root))
@@ -1074,12 +1119,12 @@ class GroupAnnotator(object):
             singleton_families.add(str(fam_num))
             species = self.parser.mapGeneToSpecies(gene)
             new_node = etree.Element('{{{ns0}}}orthologGroup'.format(
-                                                            **self.parser.ns),
-                                                            id=str(fam_num))
-            new_node.append(self._createTaxRangeTag(species))
+                **self.parser.ns),
+                id=str(fam_num))
+            new_node.extend(self._createTaxRangeTags(species))
             new_node.append(etree.Element('{{{ns0}}}geneRef'.format(
-                                                            **self.parser.ns),
-                                                            id=gene))
+                **self.parser.ns),
+                id=gene))
             groups_node.append(new_node)
             fam_num += 1
             if PROGRESSBAR and verbosity > 0:
