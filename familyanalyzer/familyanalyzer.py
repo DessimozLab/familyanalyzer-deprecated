@@ -996,7 +996,7 @@ class GroupAnnotator(object):
                 # Ortholog Node - append missing tax range(s) as property tags under the current node
                 if self.parser.is_ortholog_group(node):
                     self._insertOGs_between(node.getparent(), node, current_level, most_recent_parent_level, nr_genes,
-                                            species_covered)
+                                            species_covered, include_self=False)
 
                 # Paralog Node - insert ortholog node between self and parent; add missing tax range(s) to new parent
                 elif self.parser.is_paralog_group(node):
