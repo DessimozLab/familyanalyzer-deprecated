@@ -3,8 +3,9 @@ import os
 
 name = 'familyanalyzer'
 
-def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as fh:
+    long_description = fh.read()
+
 
 setup(
     name=name,
@@ -12,14 +13,15 @@ setup(
     author='Adrian Altenhoff',
     author_email='adrian.altenhoff@inf.ethz.ch',
     description='A tool to analyse gene family evolution from orthoxml',
-    long_description=read('README.rst'),
+    long_description=long_description,
+    long_description_content_type="text/x-rst",
     license='MIT',
     classifiers = [
          'Development Status :: 3 - Alpha',
          'Intended Audience :: Developers',
          'Intended Audience :: Science/Research',
          'Topic :: Scientific/Engineering :: Bio-Informatics',
-         'License :: OSI Approved :: MIT licence',
+         'License :: OSI Approved :: MIT License',
          'Programming Language :: Python :: 2',
          'Programming Language :: Python :: 2.7',
          'Programming Language :: Python :: 3',
