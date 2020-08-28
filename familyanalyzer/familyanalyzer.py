@@ -956,6 +956,7 @@ class GroupAnnotator(object):
         if self.parser.is_ortholog_group(node) or self.parser.is_paralog_group(node) \
                 or OrthoXMLQuery.is_geneRef_node(node):
             species_covered, nr_genes = self.parser.get_species_below_node(node, return_gene_total_count=True)
+            species_covered = set(self.tax.map_potential_internal_speciesname_to_leaf(s) for s in species_covered)
             current_level = self.tax.mrca(species_covered)
             og_tag = '{{{}}}orthologGroup'.format(OrthoXMLQuery.ns['ns0'])
 

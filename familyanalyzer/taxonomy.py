@@ -129,6 +129,14 @@ class Taxonomy(object):
             self._cpals_cache[levelSet] = counts
             return counts
 
+    def map_potential_internal_speciesname_to_leaf(self, species):
+        if len(self.descendents[species]) == 1:
+            return species
+        for leaf in self.descendents[species]:
+            if len(leaf) == 5 and re.match(r'[A-Z][A-Z[0-9]{4}', leaf) is not None:
+                return leaf
+        raise TaxonomyInconsistencyError("cannot find a 5letter code species for internal species name")
+
     def mrca(self, species):
         """Returns most recent common ancestor (MRCA) of a set of species
            This is cached to speed up multiple calls """
